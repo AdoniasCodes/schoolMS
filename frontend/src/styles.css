@@ -1,0 +1,47 @@
+:root{
+  --bg:#0b1020;
+  --panel:#121a2b;
+  --muted:#8aa0b6;
+  --text:#e7eef7;
+  --primary:#0ea5e9;
+  --primary-600:#0284c7;
+  --card:#0f1626;
+  --border:#1f2a44;
+}
+*{box-sizing:border-box}
+html,body,#root{height:100%}
+body{
+  margin:0; background:linear-gradient(180deg,#0b1020 0%, #0d1426 100%); color:var(--text);
+  font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, "Apple Color Emoji","Segoe UI Emoji";
+}
+.app-shell{max-width:1100px; margin:0 auto; padding:24px}
+.header{
+  display:flex; align-items:center; justify-content:space-between; gap:12px; margin-bottom:20px;
+}
+.brand{
+  display:flex; align-items:center; gap:12px;
+}
+.brand-logo{
+  width:36px; height:36px; border-radius:10px; background:linear-gradient(135deg,var(--primary),#7dd3fc); box-shadow:0 8px 24px rgba(14,165,233,.35);
+}
+.brand-title{font-weight:700; letter-spacing:.5px}
+.nav{display:flex; gap:8px; flex-wrap:wrap}
+.nav a, .nav button{
+  text-decoration:none; color:var(--text); background:var(--panel); border:1px solid var(--border); padding:8px 12px; border-radius:10px; cursor:pointer;
+}
+.nav a:hover, .nav button:hover{ border-color:var(--primary); color:#fff }
+.card{
+  background:linear-gradient(180deg,var(--panel), var(--card)); border:1px solid var(--border); border-radius:14px; padding:16px;
+}
+.grid{display:grid; gap:12px}
+.grid.cols-2{ grid-template-columns: repeat(2, minmax(0,1fr)); }
+.grid.cols-3{ grid-template-columns: repeat(3, minmax(0,1fr)); }
+@media (max-width: 700px){ .grid.cols-2, .grid.cols-3{ grid-template-columns: 1fr } }
+.btn{
+  display:inline-flex; align-items:center; gap:8px; padding:10px 14px; border-radius:10px; border:1px solid var(--primary); background:rgba(14,165,233,.08); color:#dff5ff; text-decoration:none;
+}
+.btn:hover{ background:rgba(14,165,233,.16)}
+.link-card{ display:block; text-decoration:none; color:var(--text); }
+.link-card h4{ margin:0 0 6px 0 }
+.link-card p{ margin:0; color:var(--muted); font-size:14px }
+hr{ border:0; border-top:1px solid var(--border); margin:16px 0 }
