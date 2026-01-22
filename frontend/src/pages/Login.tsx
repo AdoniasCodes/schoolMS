@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { useNavigate, useLocation } from 'react-router-dom'
 import { supabase } from '@/lib/supabaseClient'
 
 export default function Login() {
@@ -6,13 +7,19 @@ export default function Login() {
   const [password, setPassword] = useState('')
   const [loading, setLoading] = useState(false)
   const [message, setMessage] = useState<string | null>(null)
+  const navigate = useNavigate()
+  const location = useLocation() as any
 
   const signIn = async (e: React.FormEvent) => {
     e.preventDefault()
     setLoading(true)
     setMessage(null)
-    const { error } = await supabase.auth.signInWithPassword({ email, password })
+    const { data, error } = await supabase.auth.signInWithPassword({ email, password })
     if (error) setMessage(error.message)
+    if (data?.session) {
+      const redirectTo = location.state?.from?.pathname || '/app'
+      navigate(redirectTo, { replace: true })
+    }
     setLoading(false)
   }
 
@@ -20,7 +27,10 @@ export default function Login() {
     e.preventDefault()
     setLoading(true)
     setMessage(null)
-    const { error } = await supabase.auth.signInWithOtp({ email, options: { emailRedirectTo: window.location.origin } })
+    const { error } = await supabase.auth.signInWithOtp({
+      email,
+      options: { emailRedirectTo: `${window.location.origin}/app` }
+    })
     if (error) setMessage(error.message)
     else setMessage('Check your email for the login link')
     setLoading(false)

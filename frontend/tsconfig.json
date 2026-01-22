@@ -15,7 +15,9 @@
     "paths": {
       "@/components/*": ["src/components/*"],
       "@/pages/*": ["src/pages/*"],
-      "@/lib/*": ["src/lib/*"]
+      "@/lib/*": ["src/lib/*"],
+      "@/ui/*": ["src/ui/*"],
+      "@/auth/*": ["src/ui/auth/*"]
     }
   },
   "include": ["src"]
