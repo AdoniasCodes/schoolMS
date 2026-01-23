@@ -12,6 +12,11 @@
   --shadow: 0 6px 20px rgba(2, 8, 23, 0.06);
 }
 
+/* Accessibility: focus outlines and skip link */
+:focus-visible { outline: 3px solid #22d3ee; outline-offset: 2px }
+.skip-link { position:absolute; left:-9999px; top:auto; width:1px; height:1px; overflow:hidden }
+.skip-link:focus { position: fixed; left: 16px; top: 16px; width: auto; height: auto; background: var(--panel); border:1px solid var(--border); padding: 8px 12px; border-radius: 10px; z-index: 100 }
+
 :root[data-theme="dark"] {
   --bg: #0b1020; /* true dark */
   --panel: #0f1626;

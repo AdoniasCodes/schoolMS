@@ -1,7 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { ShieldCheck, School, Globe, Timer, Users, ClipboardList, Megaphone, MessageCircle, BarChart3, CheckCircle2 } from 'lucide-react'
-import TeacherTablet from '@/ui/illustrations/TeacherTablet'
 
 export default function Landing() {
   const [menuOpen, setMenuOpen] = useState(false)
@@ -13,21 +12,21 @@ export default function Landing() {
 
   return (
     <div className="landing">
+      <a href="#main" className="skip-link">Skip to content</a>
       {/* Header */}
       <header className="landing-header">
         <div className="landing-header-inner">
           <div className="brand" style={{ gap: 10 }}>
-            <div className="brand-logo" aria-hidden />
-            <div className="brand-title">Abogida</div>
+            <img src="/images/logo.webp" alt="Abogida logo" style={{ width: 120, height: 'auto', borderRadius: 12, display:'block', aspectRatio: '500 / 178', maxHeight: 42.72 }} />
           </div>
-          <nav className="landing-nav">
-            <a href="#product">Product</a>
-            <a href="#how">How It Works</a>
-            <a href="#schools">Schools</a>
-            <a href="#contact">Contact</a>
-            <Link to="/login" className="btn btn-primary">Sign In</Link>
+          <nav className="landing-nav" aria-label="Primary">
+            <a href="#product" aria-label="Go to Product section">Product</a>
+            <a href="#how" aria-label="Go to How It Works section">How It Works</a>
+            <a href="#schools" aria-label="Go to Schools section">Schools</a>
+            <a href="#contact" aria-label="Go to Contact section">Contact</a>
+            <Link to="/login" className="btn btn-primary" aria-label="Sign in to Abogida">Sign In</Link>
           </nav>
-          <button className="hamburger" aria-label="Menu" onClick={() => setMenuOpen(true)}>
+          <button className="hamburger" aria-label="Open menu" aria-controls="mobile-menu" aria-expanded={menuOpen} onClick={() => setMenuOpen(true)}>
             <span />
             <span />
             <span />
@@ -36,23 +35,22 @@ export default function Landing() {
       </header>
 
       {/* Off-canvas Mobile Menu */}
-      <div className={`offcanvas ${menuOpen ? 'open' : ''}`}>
+      <div className={`offcanvas ${menuOpen ? 'open' : ''}`} id="mobile-menu" role="dialog" aria-modal="true" aria-label="Mobile navigation">
         <div className="offcanvas-panel">
           <div className="brand" style={{ gap: 10, padding: '16px 8px' }}>
-            <div className="brand-logo" aria-hidden />
-            <div className="brand-title">Abogida</div>
+            <img src="/images/logo.webp" alt="Abogida logo" style={{ width: 120, height: 'auto', borderRadius: 12, display:'block', aspectRatio: '500 / 178', maxHeight: 42.72 }} />
           </div>
-          <a href="#product" onClick={() => setMenuOpen(false)}>Product</a>
-          <a href="#how" onClick={() => setMenuOpen(false)}>How It Works</a>
-          <a href="#schools" onClick={() => setMenuOpen(false)}>Schools</a>
-          <a href="#contact" onClick={() => setMenuOpen(false)}>Contact</a>
-          <Link to="/login" className="btn btn-primary" onClick={() => setMenuOpen(false)}>Sign In</Link>
-          <button className="btn btn-secondary" onClick={() => setMenuOpen(false)} style={{ marginTop: 8 }}>Close</button>
+          <a href="#product" onClick={() => setMenuOpen(false)} aria-label="Go to Product section">Product</a>
+          <a href="#how" onClick={() => setMenuOpen(false)} aria-label="Go to How It Works section">How It Works</a>
+          <a href="#schools" onClick={() => setMenuOpen(false)} aria-label="Go to Schools section">Schools</a>
+          <a href="#contact" onClick={() => setMenuOpen(false)} aria-label="Go to Contact section">Contact</a>
+          <Link to="/login" className="btn btn-primary" onClick={() => setMenuOpen(false)} aria-label="Sign in to Abogida">Sign In</Link>
+          <button className="btn btn-secondary" onClick={() => setMenuOpen(false)} style={{ marginTop: 8 }} aria-label="Close menu">Close</button>
         </div>
         <div className="offcanvas-backdrop" onClick={() => setMenuOpen(false)} />
       </div>
 
-      <main>
+      <main id="main" tabIndex={-1}>
         {/* Hero */}
         <section className="hero">
           <div className="hero-inner grid cols-2">
@@ -67,9 +65,13 @@ export default function Landing() {
             <div className="hero-visual">
               <div className="shape shape-1" />
               <div className="shape shape-2" />
-              <div className="hero-card card" style={{ overflow: 'hidden' }}>
-                <TeacherTablet style={{ height: 160 }} />
-                <div className="helper" style={{ marginTop: 8 }}>Teacher using tablet — illustration</div>
+              <div className="hero-card card" style={{ overflow: 'hidden', display:'flex', alignItems:'center', justifyContent:'center' }}>
+                <img
+                  src="/images/hero.webp"
+                  alt="Teacher using tablet – Abogida school platform"
+                  loading="eager"
+                  style={{ width: '100%', height: 'auto', objectFit: 'contain', objectPosition: 'center', display:'block', maxHeight: 320 }}
+                />
               </div>
               <div className="hero-row">
                 <div className="card" style={{ flex: 1 }}>
@@ -136,9 +138,13 @@ export default function Landing() {
         {/* How it helps */}
         <section id="how" className="how">
           <div className="grid cols-2" style={{ alignItems: 'center' }}>
-            <div className="card" style={{ minHeight: 220 }}>
-              <div className="skeleton" style={{ height: 180, borderRadius: 12 }} />
-              <div className="helper" style={{ marginTop: 8 }}>School admin illustration</div>
+            <div className="card" style={{ minHeight: 220, overflow:'hidden', display:'flex', alignItems:'center', justifyContent:'center' }}>
+              <img
+                src="/images/admin.webp"
+                alt="School administration dashboard illustration"
+                loading="lazy"
+                style={{ width: '100%', height: 'auto', objectFit: 'contain', objectPosition: 'center', display:'block', maxHeight: 320, borderRadius: 12, boxShadow: 'var(--shadow)' }}
+              />
             </div>
             <div className="how-list">
               <div className="how-item">

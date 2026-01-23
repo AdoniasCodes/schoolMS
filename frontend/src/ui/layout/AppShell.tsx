@@ -7,7 +7,7 @@ const NavLink: React.FC<{ to: string; label: string; icon?: React.ReactNode }> =
   const loc = useLocation()
   const active = loc.pathname === to
   return (
-    <Link to={to} className="nav-link" style={{
+    <Link to={to} className="nav-link" aria-label={label} aria-current={active ? 'page' : undefined} style={{
       textDecoration: 'none',
       color: 'var(--text)',
       padding: '10px 12px',
@@ -34,10 +34,10 @@ export const AppShell: React.FC<{ children: React.ReactNode }> = ({ children }) 
   }
   return (
     <div className="app-shell">
+      <a href="#main" className="skip-link">Skip to content</a>
       <aside className="sidebar">
         <div className="brand">
-          <div className="brand-logo" aria-hidden />
-          <div className="brand-title">ABOGIDA</div>
+          <img src="/images/logo.webp" alt="Abogida logo" style={{ width: 120, height: 'auto', borderRadius: 12, display:'block', aspectRatio: '500 / 178', maxHeight: 42.72 }} />
         </div>
         <nav className="nav-vertical">
           <NavLink to="/app" label="Dashboard" />
@@ -51,14 +51,14 @@ export const AppShell: React.FC<{ children: React.ReactNode }> = ({ children }) 
           <NavLink to="/app/settings" label="Settings" />
         </nav>
       </aside>
-      <main className="content">
+      <main id="main" className="content" tabIndex={-1}>
         <div className="topbar">
           <div />
           <div style={{ display: 'flex', gap: 8 }}>
-            <button className="btn btn-secondary" onClick={toggle} aria-label="Toggle theme">
+            <button className="btn btn-secondary" onClick={toggle} aria-label={theme === 'light' ? 'Activate dark mode' : 'Activate light mode'}>
               {theme === 'light' ? 'Dark mode' : 'Light mode'}
             </button>
-            <button className="btn btn-secondary" onClick={signOut}>Sign out</button>
+            <button className="btn btn-secondary" onClick={signOut} aria-label="Sign out of Abogida">Sign out</button>
           </div>
         </div>
         {children}
