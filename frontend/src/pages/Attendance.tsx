@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { supabase } from '@/lib/supabaseClient'
 import { useToast } from '@/ui/components/toast/ToastProvider'
+import { LoadingSpinner } from '@/ui/components/LoadingSpinner'
 
 interface ClassRow { id: string; name: string }
 interface StudentRow { id: string; first_name: string; last_name: string }
@@ -18,6 +19,8 @@ export default function Attendance() {
   const [teacherId, setTeacherId] = useState<string>('')
   const [schoolId, setSchoolId] = useState<string>('')
   const { show } = useToast()
+  const [classesError, setClassesError] = useState<string | null>(null)
+  const [studentsError, setStudentsError] = useState<string | null>(null)
 
   useEffect(() => {
     const loadClasses = async () => {
@@ -32,7 +35,10 @@ export default function Attendance() {
       setTeacherId(teacher.id)
       setSchoolId(teacher.school_id)
       const { data: classRows, error } = await supabase.from('classes').select('id, name').eq('teacher_id', teacher.id)
-      if (error) console.error(error)
+      if (error) {
+        console.error(error)
+        setClassesError('Failed to load classes.')
+      }
       setClasses(classRows ?? [])
       setLoadingClasses(false)
     }
@@ -43,10 +49,22 @@ export default function Attendance() {
     const loadStudents = async () => {
       if (!selectedClass) return
       setLoadingStudents(true)
-      const { data: enrolls } = await supabase.from('enrollments').select('student_id').eq('class_id', selectedClass)
+      setStudentsError(null)
+      const { data: enrolls, error: enrollErr } = await supabase.from('enrollments').select('student_id').eq('class_id', selectedClass)
+      if (enrollErr) {
+        console.error(enrollErr)
+        setStudentsError('Failed to load students.')
+        setStudents([])
+        setLoadingStudents(false)
+        return
+      }
       const ids = (enrolls ?? []).map((e) => e.student_id)
       if (ids.length === 0) { setStudents([]); return }
-      const { data: studs } = await supabase.from('students').select('id, first_name, last_name').in('id', ids)
+      const { data: studs, error: studsErr } = await supabase.from('students').select('id, first_name, last_name').in('id', ids)
+      if (studsErr) {
+        console.error(studsErr)
+        setStudentsError('Failed to load students.')
+      }
       setStudents(studs ?? [])
       setLoadingStudents(false)
     }
@@ -100,8 +118,14 @@ export default function Attendance() {
           )}
           <label htmlFor="dateSel" className="helper">Date</label>
           <input id="dateSel" type="date" aria-label="Select date" value={date} onChange={(e) => setDate(e.target.value)} />
-          <button className="btn btn-primary" onClick={save} disabled={!selectedClass || saving} aria-label="Save attendance">{saving ? 'Saving…' : 'Save'}</button>
+          <button className="btn btn-primary" onClick={save} disabled={!selectedClass || saving} aria-label="Save attendance" style={{ display:'inline-flex', alignItems:'center', gap:8, minWidth:96, justifyContent:'center' }}>
+            {saving ? (<><LoadingSpinner size="sm" /> Saving…</>) : 'Save'}
+          </button>
         </div>
+      )}
+
+      {classesError && (
+        <p className="helper" role="status" style={{ color: 'var(--danger)' }}>{classesError}</p>
       )}
 
       {!selectedClass ? (
@@ -118,6 +142,9 @@ export default function Attendance() {
         <p className="helper">No students in this class.</p>
       ) : (
         <>
+        {studentsError && (
+          <p className="helper" role="status" style={{ color: 'var(--danger)' }}>{studentsError}</p>
+        )}
         <div style={{ display:'flex', gap:8, marginBottom:8 }}>
           <button className="btn btn-secondary" onClick={() => markAll('present')} aria-label="Mark all present">All Present</button>
           <button className="btn btn-secondary" onClick={() => markAll('absent')} aria-label="Mark all absent">All Absent</button>

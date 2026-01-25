@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { supabase } from '@/lib/supabaseClient'
 import { useToast } from '@/ui/components/toast/ToastProvider'
+import { LoadingSpinner } from '@/ui/components/LoadingSpinner'
 
 interface ClassRow { id: string; name: string }
 interface UpdateRow { id: string; class_id: string; teacher_id: string; text_content: string | null; created_at: string }
@@ -20,7 +21,8 @@ export default function Updates() {
   const pageSize = 10
   const { show } = useToast()
   const [uploading, setUploading] = useState(false)
-  const [mediaMap, setMediaMap] = useState<Record<string, string | null>>({})
+  const [mediaMap, setMediaMap] = useState<Record<string, { url: string; name: string } | null>>({})
+  const [feedError, setFeedError] = useState<string | null>(null)
 
   useEffect(() => {
     const init = async () => {
@@ -51,6 +53,7 @@ export default function Updates() {
 
   const loadFeed = async () => {
     setLoadingFeed(true)
+    setFeedError(null)
     let query = supabase
       .from('daily_updates')
       .select('id, class_id, teacher_id, text_content, created_at')
@@ -59,6 +62,7 @@ export default function Updates() {
     if (selectedClass) query = query.eq('class_id', selectedClass)
     const { data, error } = await query
     if (!error) setFeed(data ?? [])
+    if (error) setFeedError('Failed to load updates.')
     setLoadingFeed(false)
     if (!error) {
       // load media previews best-effort
@@ -71,54 +75,130 @@ export default function Updates() {
   const post = async () => {
     if (!canPost || !selectedClass || !text.trim()) return
     setPosting(true)
-    const { error } = await supabase.from('daily_updates').insert({
-      school_id: schoolId,
-      class_id: selectedClass,
-      teacher_id: teacherId,
-      text_content: text.trim()
-    })
-    setPosting(false)
-    if (error) {
-      show(error.message, 'error')
-      return
+    
+    try {
+      // 1. Create the update first
+      const { data: update, error: updateError } = await supabase
+        .from('daily_updates')
+        .insert({
+          school_id: schoolId,
+          class_id: selectedClass,
+          teacher_id: teacherId,
+          text_content: text.trim(),
+        })
+        .select('id')
+        .single()
+      
+      if (updateError) throw updateError
+      
+      // 2. If there's a file, upload and associate it with this update
+      if (file) {
+        try {
+          await uploadMedia(update.id)
+        } catch (err) {
+          console.error('Media upload failed, but update was posted', err)
+          // Continue even if media upload fails
+        }
+      }
+      
+      // 3. Refresh the feed
+      setText('')
+      setFile(null)
+      await loadFeed()
+      show('Update posted' + (file ? ' with media' : ''), 'success')
+    } catch (error: any) {
+      console.error('Post error:', error)
+      show(error.message || 'Failed to post update', 'error')
+    } finally {
+      setPosting(false)
     }
-    setText('')
-    await loadFeed()
-    show('Update posted', 'success')
   }
 
-  const uploadMedia = async () => {
+  const uploadMedia = async (updateId?: string) => {
     if (!file) return
-    if (!schoolId || !teacherId) { show('Missing teacher/school context', 'error'); return }
-    const path = `${schoolId}/updates/${teacherId}/${Date.now()}_${file.name}`
+    if (!schoolId || !teacherId) { 
+      show('Missing teacher/school context', 'error'); 
+      return 
+    }
+    
+    const path = `${schoolId}/updates/${teacherId}/${Date.now()}_${file.name.replace(/[^\w.]+/g, '_')}`
     setUploading(true)
-    const { error: upErr } = await supabase.storage.from('media').upload(path, file, { upsert: false })
-    setUploading(false)
-    if (upErr) { show(upErr.message, 'error'); return }
-    await supabase.from('media_assets').insert({ bucket: 'media', object_path: path, school_id: schoolId }).catch(() => {})
-    show('Media uploaded', 'success')
-    setFile(null)
+    
+    try {
+      // 1. Upload the file to storage
+      const { error: upErr } = await supabase.storage
+        .from('media')
+        .upload(path, file, { 
+          upsert: false,
+          contentType: file.type || 'application/octet-stream'
+        })
+      
+      if (upErr) throw upErr
+      
+      // 2. Create media_asset record with update_id if available
+      const { error: dbErr } = await supabase
+        .from('media_assets')
+        .insert({
+          bucket: 'media',
+          object_path: path,
+          name: file.name,
+          school_id: schoolId,
+          update_id: updateId || null,
+          content_type: file.type || 'application/octet-stream',
+          size: file.size,
+        })
+      
+      if (dbErr) throw dbErr
+      
+      show('Media uploaded', 'success')
+      return path
+    } catch (error: any) {
+      console.error('Upload error:', error)
+      show(error.message || 'Failed to upload media', 'error')
+      throw error
+    } finally {
+      setUploading(false)
+      setFile(null)
+    }
   }
 
   const loadMediaPreviews = async (items: UpdateRow[]) => {
     if (!schoolId) return
-    const next: Record<string, string | null> = {}
-    for (const u of items) {
+    const next: Record<string, { url: string; name: string } | null> = {}
+    
+    // Get all media for these updates in one query
+    const { data: mediaItems, error } = await supabase
+      .from('media_assets')
+      .select('id, object_path, name, update_id')
+      .in('update_id', items.map(u => u.id))
+      .eq('school_id', schoolId)
+    
+    if (error) {
+      console.error('Error loading media previews:', error)
+      return
+    }
+    
+    // Create signed URLs for each media item
+    for (const item of mediaItems || []) {
+      if (!item.update_id) continue
       try {
-        // Heuristic: list objects under teacher folder and pick closest by time
-        const prefix = `${schoolId}/updates/${u.teacher_id}`
-        const { data: list } = await supabase.storage.from('media').list(prefix, { limit: 100, offset: 0 })
-        if (!list || list.length === 0) { next[u.id] = null; continue }
-        // pick the last object (rough heuristic)
-        const obj = list[list.length - 1]
-        const fullPath = `${prefix}/${obj.name}`
-        const { data: signed } = await supabase.storage.from('media').createSignedUrl(fullPath, 60 * 60)
-        next[u.id] = signed?.signedUrl ?? null
-      } catch {
-        next[u.id] = null
+        const { data: signed } = await supabase.storage
+          .from('media')
+          .createSignedUrl(item.object_path, 60 * 60) // 1 hour expiry
+        
+        if (signed) {
+          next[item.update_id] = {
+            url: signed.signedUrl,
+            name: item.name || 'Media'
+          }
+        }
+      } catch (err) {
+        console.error('Error creating signed URL:', err)
+        next[item.update_id] = null
       }
     }
-    setMediaMap(next)
+    
+    setMediaMap(prev => ({ ...prev, ...next }))
   }
 
   return (
@@ -143,9 +223,38 @@ export default function Updates() {
             style={{ width: '100%' }}
           />
           <div style={{ marginTop: 8, display:'flex', gap:8, alignItems:'center' }}>
-            <input type="file" aria-label="Attach media" onChange={(e) => setFile(e.target.files?.[0] ?? null)} />
-            <button className="btn btn-secondary" onClick={uploadMedia} disabled={!file || uploading}>{uploading ? 'Uploading…' : 'Upload Media'}</button>
-            <button className="btn btn-primary" onClick={post} disabled={posting || !selectedClass || !text.trim()}>{posting ? 'Posting…' : 'Post'}</button>
+            <input 
+              type="file" 
+              id="media-upload"
+              aria-label="Attach media" 
+              onChange={(e) => setFile(e.target.files?.[0] ?? null)} 
+              className="visually-hidden"
+            />
+            <label 
+              htmlFor="media-upload" 
+              className="btn btn-secondary"
+              style={{ display: 'inline-flex', alignItems: 'center', gap: '0.5rem' }}
+            >
+              {uploading ? (
+                <>
+                  <LoadingSpinner size="sm" />
+                  Uploading...
+                </>
+              ) : 'Attach Media'}
+            </label>
+            <button 
+              className="btn btn-primary" 
+              onClick={post} 
+              disabled={posting || !selectedClass || !text.trim()}
+              style={{ minWidth: '100px', display: 'inline-flex', justifyContent: 'center', gap: '0.5rem' }}
+            >
+              {posting ? (
+                <>
+                  <LoadingSpinner size="sm" />
+                  Posting...
+                </>
+              ) : 'Post'}
+            </button>
           </div>
         </div>
       )}
@@ -162,6 +271,8 @@ export default function Updates() {
               </li>
             ))}
           </ul>
+        ) : feedError ? (
+          <p className="helper" role="status" style={{ color: 'var(--danger)' }}>{feedError}</p>
         ) : feed.length === 0 ? (
           <p>No updates for this class.</p>
         ) : (
@@ -171,9 +282,45 @@ export default function Updates() {
                 <div style={{ fontSize: 12, color: '#666' }}>{new Date(u.created_at).toLocaleString()}</div>
                 <div style={{ marginTop: 8 }}>{u.text_content}</div>
                 {mediaMap[u.id] && (
-                  <div style={{ marginTop: 8 }}>
-                    <img src={mediaMap[u.id] as string} alt="Update media" style={{ maxWidth: '100%', height: 'auto', borderRadius: 8 }} onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none' }} />
-                    {!mediaMap[u.id] && <a href={mediaMap[u.id] as string} target="_blank" rel="noreferrer">View media</a>}
+                  <div style={{ marginTop: '1rem' }}>
+                    <div 
+                      style={{
+                        position: 'relative',
+                        maxWidth: '100%',
+                        borderRadius: '8px',
+                        overflow: 'hidden',
+                        border: '1px solid var(--border)',
+                        background: 'var(--panel)'
+                      }}
+                    >
+                      <img 
+                        src={mediaMap[u.id]?.url} 
+                        alt={mediaMap[u.id]?.name || 'Update media'} 
+                        style={{ 
+                          display: 'block',
+                          maxWidth: '100%', 
+                          height: 'auto',
+                          margin: '0 auto'
+                        }} 
+                        onError={(e) => { 
+                          const el = e.currentTarget as HTMLImageElement;
+                          el.style.display = 'none';
+                          // Show fallback link
+                          const link = document.createElement('a');
+                          link.href = mediaMap[u.id]?.url || '#';
+                          link.target = '_blank';
+                          link.rel = 'noopener noreferrer';
+                          link.textContent = 'View media';
+                          link.style.display = 'inline-block';
+                          link.style.marginTop = '0.5rem';
+                          link.style.color = 'var(--primary)';
+                          el.parentNode?.appendChild(link);
+                        }} 
+                      />
+                    </div>
+                    <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginTop: '0.25rem' }}>
+                      {mediaMap[u.id]?.name}
+                    </div>
                   </div>
                 )}
               </li>
