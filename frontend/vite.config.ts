@@ -14,7 +14,9 @@ export default defineConfig({
   server: {
     port: 5173,
     host: true,
-    strictPort: true
+    strictPort: true,
+    // Allow access via tunnels like LocalTunnel (e.g., *.loca.lt)
+    allowedHosts: true
     // No tunnel/HMR overrides; Vite will use ws on localhost
   }
 })
