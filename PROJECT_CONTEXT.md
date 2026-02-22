@@ -259,3 +259,16 @@ Notes:
   - `VITE_TUNNEL_HOST` no longer needed; `.env.local` can omit it
 - Why: User prefers local-only development; avoids reload loops and tunnel-related noise
 - Impact: Run `npm run dev` from `frontend/` and use `http://localhost:5173`
+
+### 2026-02-22 Step 17
+- Fixed Vercel deployment configuration and asset serving issues
+- Issues encountered:
+  - Vercel build failed due to invalid `root` property in `vercel.json`
+  - When accessing `/frontend` URL, site loaded but static assets (JS, CSS, favicon) returned 404
+- Changes made to `vercel.json`:
+  - Removed invalid `root` property (not supported in Vercel v2)
+  - Updated `builds.src` to point to `frontend/package.json`
+  - Updated routing to serve all requests from `/frontend/dist/$1` to correctly handle static assets
+- Why: Fix deployment issues and ensure proper asset loading for production deployment
+- Impact: Vercel should now build and serve the React app correctly from the frontend subdirectory
+- Committed changes to GitHub for deployment
