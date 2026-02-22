@@ -1,16 +1,15 @@
 {
   "version": 2,
-  "root": "frontend",
   "builds": [
     {
-      "src": "package.json",
+      "src": "frontend/package.json",
       "use": "@vitejs/vite"
     }
   ],
   "routes": [
     {
       "src": "/(.*)",
-      "dest": "/$1"
+      "dest": "/frontend/dist/$1"
     }
   ]
 }
