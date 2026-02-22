@@ -3,7 +3,7 @@
   "builds": [
     {
       "src": "frontend/package.json",
-      "use": "@vitejs/vite"
+      "use": "vite"
     }
   ],
   "routes": [
