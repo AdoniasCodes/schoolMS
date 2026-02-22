@@ -272,3 +272,35 @@ Notes:
 - Why: Fix deployment issues and ensure proper asset loading for production deployment
 - Impact: Vercel should now build and serve the React app correctly from the frontend subdirectory
 - Committed changes to GitHub for deployment
+
+### 2026-02-22 Step 18
+- Fixed Vercel builder configuration error
+- Issue: Vercel build failed with "The package `@vitejs/vite` is not published on the npm registry"
+- Change: Updated `vercel.json` to use `"use": "vite"` instead of `"@vitejs/vite"` for the builder
+- Why: `@vitejs/vite` is not a valid Vercel builder; the correct value is `"vite"`
+- Impact: Vercel should now be able to install and use the Vite builder for deployment
+- Committed and pushed fix to GitHub
+
+### 2026-02-22 Step 19
+- Configured Vercel root directory and updated deployment settings
+- User action: Set Vercel project root directory to `frontend` in Vercel dashboard
+- Change: Updated `vercel.json` to work with frontend as root directory:
+  - Changed `builds.src` from `"frontend/package.json"` to `"package.json"`
+  - Simplified routes to serve from `/$1` instead of `/frontend/dist/$1`
+- Why: Vercel was unable to resolve entry module "index.html" because build was not running from correct directory
+- Impact: Vite build should now find index.html and build successfully with frontend as root
+- Committed and pushed configuration update to GitHub
+
+### 2026-02-22 Step 20
+- Cleaned up environment configuration for scalability and environment-awareness
+- Audit results:
+  - No hardcoded URLs found in code (only documentation comments)
+  - Supabase client already properly using environment variables with error handling
+  - Authentication redirects already dynamic using `window.location.origin`
+- Changes made:
+  - Added `VITE_API_URL` placeholder to `.env.local` for future API scalability
+  - Verified Supabase client centralized in `frontend/src/lib/supabaseClient.ts`
+  - Confirmed Vite config properly handles environment variables
+- Why: Ensure app is environment-aware and scalable across different deployments
+- Impact: Configuration is now ready for production with proper environment variable management
+- User manually updated `.env.local` with `VITE_API_URL=`
