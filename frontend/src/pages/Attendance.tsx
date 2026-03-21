@@ -34,7 +34,7 @@ export default function Attendance() {
       if (!teacher) { setLoadingClasses(false); return }
       setTeacherId(teacher.id)
       setSchoolId(teacher.school_id)
-      const { data: classRows, error } = await supabase.from('classes').select('id, name').eq('teacher_id', teacher.id)
+      const { data: classRows, error } = await supabase.from('classes').select('id, name').eq('teacher_id', teacher.id).is('deleted_at', null)
       if (error) {
         console.error(error)
         setClassesError('Failed to load classes.')
@@ -50,7 +50,7 @@ export default function Attendance() {
       if (!selectedClass) return
       setLoadingStudents(true)
       setStudentsError(null)
-      const { data: enrolls, error: enrollErr } = await supabase.from('enrollments').select('student_id').eq('class_id', selectedClass)
+      const { data: enrolls, error: enrollErr } = await supabase.from('enrollments').select('student_id').eq('class_id', selectedClass).is('deleted_at', null)
       if (enrollErr) {
         console.error(enrollErr)
         setStudentsError('Failed to load students.')
@@ -60,7 +60,7 @@ export default function Attendance() {
       }
       const ids = (enrolls ?? []).map((e) => e.student_id)
       if (ids.length === 0) { setStudents([]); return }
-      const { data: studs, error: studsErr } = await supabase.from('students').select('id, first_name, last_name').in('id', ids)
+      const { data: studs, error: studsErr } = await supabase.from('students').select('id, first_name, last_name').in('id', ids).is('deleted_at', null)
       if (studsErr) {
         console.error(studsErr)
         setStudentsError('Failed to load students.')

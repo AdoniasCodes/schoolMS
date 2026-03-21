@@ -37,7 +37,7 @@ export default function Updates() {
         const { data: teacher } = await supabase.from('teachers').select('id').eq('user_id', user.id).maybeSingle()
         if (teacher) {
           setTeacherId(teacher.id)
-          const { data: classRows } = await supabase.from('classes').select('id, name').eq('teacher_id', teacher.id)
+          const { data: classRows } = await supabase.from('classes').select('id, name').eq('teacher_id', teacher.id).is('deleted_at', null)
           setClasses(classRows ?? [])
         }
       }
