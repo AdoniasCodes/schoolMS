@@ -13,15 +13,22 @@ interface Props {
 
 interface ClassOption { id: string; name: string }
 interface ParentOption { id: string; full_name: string }
+interface ExistingStudent { id: string; first_name: string; last_name: string }
 
-const STEPS = ['Student Info', 'Class', 'Parent', 'Review']
+const STEPS = ['Student', 'Class', 'Parent', 'Review']
 
 export const QuickEnrollWizard: React.FC<Props> = ({ open, onClose, schoolId, onComplete }) => {
   const { show } = useToast()
   const [step, setStep] = useState(0)
   const [saving, setSaving] = useState(false)
 
-  // Step 1: Student info
+  // Mode: create new or use existing
+  const [mode, setMode] = useState<'new' | 'existing'>('existing')
+  const [existingStudents, setExistingStudents] = useState<ExistingStudent[]>([])
+  const [searchQuery, setSearchQuery] = useState('')
+  const [selectedExisting, setSelectedExisting] = useState<ExistingStudent | null>(null)
+
+  // New student fields
   const [firstName, setFirstName] = useState('')
   const [lastName, setLastName] = useState('')
   const [dob, setDob] = useState('')
@@ -29,75 +36,95 @@ export const QuickEnrollWizard: React.FC<Props> = ({ open, onClose, schoolId, on
   const [guardianName, setGuardianName] = useState('')
   const [guardianPhone, setGuardianPhone] = useState('')
 
-  // Step 2: Class
+  // Class
   const [classes, setClasses] = useState<ClassOption[]>([])
   const [selectedClass, setSelectedClass] = useState('')
 
-  // Step 3: Parent
+  // Parent
   const [parents, setParents] = useState<ParentOption[]>([])
   const [selectedParent, setSelectedParent] = useState('')
   const [relation, setRelation] = useState('guardian')
 
   useEffect(() => {
     if (!open) return
-    // Reset
-    setStep(0); setFirstName(''); setLastName(''); setDob(''); setGender('')
+    setStep(0); setMode('existing'); setSearchQuery(''); setSelectedExisting(null)
+    setFirstName(''); setLastName(''); setDob(''); setGender('')
     setGuardianName(''); setGuardianPhone(''); setSelectedClass(''); setSelectedParent(''); setRelation('guardian')
 
-    // Load options
     const loadOptions = async () => {
-      const { data: cls } = await supabase.from('classes').select('id, name').is('deleted_at', null).order('name')
-      setClasses(cls ?? [])
-
-      const { data: prts } = await supabase.from('parents').select('id, users(full_name)').is('deleted_at', null)
-      setParents((prts ?? []).map((p: any) => ({ id: p.id, full_name: p.users?.full_name ?? 'Unknown' })))
+      const [clsRes, prtsRes, studsRes] = await Promise.all([
+        supabase.from('classes').select('id, name').is('deleted_at', null).order('name'),
+        supabase.from('parents').select('id, users(full_name)').is('deleted_at', null),
+        supabase.from('students').select('id, first_name, last_name').is('deleted_at', null).order('first_name'),
+      ])
+      setClasses(clsRes.data ?? [])
+      setParents((prtsRes.data ?? []).map((p: any) => ({ id: p.id, full_name: p.users?.full_name ?? 'Unknown' })))
+      setExistingStudents(studsRes.data ?? [])
     }
     loadOptions()
   }, [open])
 
+  const filteredStudents = searchQuery.trim()
+    ? existingStudents.filter(s =>
+        `${s.first_name} ${s.last_name}`.toLowerCase().includes(searchQuery.toLowerCase())
+      )
+    : existingStudents
+
+  const studentName = mode === 'existing' && selectedExisting
+    ? `${selectedExisting.first_name} ${selectedExisting.last_name}`
+    : `${firstName} ${lastName}`
+
   const canNext = () => {
-    if (step === 0) return firstName.trim() && lastName.trim()
-    return true // Steps 1,2 are optional (skip)
+    if (step === 0) {
+      if (mode === 'existing') return !!selectedExisting
+      return firstName.trim() && lastName.trim()
+    }
+    return true
   }
 
   const handleSubmit = async () => {
     setSaving(true)
+    let studentId: string
 
-    // 1. Create student
-    const { data: student, error: studErr } = await supabase.from('students').insert({
-      school_id: schoolId,
-      first_name: firstName.trim(),
-      last_name: lastName.trim(),
-      date_of_birth: dob || null,
-      gender: gender || null,
-      guardian_name: guardianName.trim() || null,
-      guardian_phone: guardianPhone.trim() || null,
-    }).select('id').single()
+    if (mode === 'existing' && selectedExisting) {
+      studentId = selectedExisting.id
+    } else {
+      const { data: student, error: studErr } = await supabase.from('students').insert({
+        school_id: schoolId,
+        first_name: firstName.trim(),
+        last_name: lastName.trim(),
+        date_of_birth: dob || null,
+        gender: gender || null,
+        guardian_name: guardianName.trim() || null,
+        guardian_phone: guardianPhone.trim() || null,
+      }).select('id').single()
 
-    if (studErr || !student) {
-      show(studErr?.message ?? 'Failed to create student', 'error')
-      setSaving(false)
-      return
+      if (studErr || !student) {
+        show(studErr?.message ?? 'Failed to create student', 'error')
+        setSaving(false)
+        return
+      }
+      studentId = student.id
     }
 
-    // 2. Enroll in class
+    // Enroll in class
     if (selectedClass) {
       const { error: enrollErr } = await supabase.from('enrollments').insert({
         school_id: schoolId,
         class_id: selectedClass,
-        student_id: student.id,
+        student_id: studentId,
       })
-      if (enrollErr) show(`Enrolled student but class enrollment failed: ${enrollErr.message}`, 'error')
+      if (enrollErr) show(`Class enrollment failed: ${enrollErr.message}`, 'error')
     }
 
-    // 3. Link to parent
+    // Link to parent
     if (selectedParent) {
       const { error: linkErr } = await supabase.from('parent_students').insert({
         parent_id: selectedParent,
-        student_id: student.id,
+        student_id: studentId,
         relation: relation || null,
       })
-      if (linkErr) show(`Student created but parent link failed: ${linkErr.message}`, 'error')
+      if (linkErr) show(`Parent link failed: ${linkErr.message}`, 'error')
     }
 
     show('Student enrolled successfully!', 'success')
@@ -107,7 +134,7 @@ export const QuickEnrollWizard: React.FC<Props> = ({ open, onClose, schoolId, on
   }
 
   return (
-    <Modal open={open} onClose={onClose} title="Quick Enroll Student">
+    <Modal open={open} onClose={onClose} title="Quick Enroll" wide>
       {/* Step indicator */}
       <div className="step-indicator">
         {STEPS.map((s, i) => (
@@ -116,61 +143,115 @@ export const QuickEnrollWizard: React.FC<Props> = ({ open, onClose, schoolId, on
       </div>
       <p className="helper" style={{ textAlign: 'center', marginTop: -12, marginBottom: 16 }}>{STEPS[step]}</p>
 
-      {/* Step 0: Student Info */}
+      {/* Step 0: Student — existing or new */}
       {step === 0 && (
-        <div style={{ display: 'grid', gap: 12 }}>
-          <div className="grid cols-2" style={{ gap: 10 }}>
-            <div>
-              <label className="helper">First Name *</label>
-              <input value={firstName} onChange={e => setFirstName(e.target.value)} placeholder="First name" />
-            </div>
-            <div>
-              <label className="helper">Last Name *</label>
-              <input value={lastName} onChange={e => setLastName(e.target.value)} placeholder="Last name" />
-            </div>
-            <div>
-              <label className="helper">Date of Birth</label>
-              <input type="date" value={dob} onChange={e => setDob(e.target.value)} />
-            </div>
-            <div>
-              <label className="helper">Gender</label>
-              <select value={gender} onChange={e => setGender(e.target.value)}>
-                <option value="">Select</option>
-                <option value="male">Male</option>
-                <option value="female">Female</option>
-              </select>
-            </div>
+        <div>
+          {/* Mode toggle */}
+          <div className="tab-bar" style={{ marginBottom: 12 }}>
+            <button className={`tab-btn ${mode === 'existing' ? 'active' : ''}`} onClick={() => { setMode('existing'); setSelectedExisting(null) }}>
+              Search Existing
+            </button>
+            <button className={`tab-btn ${mode === 'new' ? 'active' : ''}`} onClick={() => setMode('new')}>
+              Create New
+            </button>
           </div>
-          <hr />
-          <div className="grid cols-2" style={{ gap: 10 }}>
+
+          {mode === 'existing' ? (
             <div>
-              <label className="helper">Guardian Name</label>
-              <input value={guardianName} onChange={e => setGuardianName(e.target.value)} placeholder="Parent/guardian" />
+              <input
+                value={searchQuery}
+                onChange={e => setSearchQuery(e.target.value)}
+                placeholder="Search by name..."
+                style={{ marginBottom: 8 }}
+              />
+              <div style={{ maxHeight: 200, overflow: 'auto', border: '1px solid var(--border)', borderRadius: 10 }}>
+                {filteredStudents.length === 0 ? (
+                  <div style={{ padding: 16, textAlign: 'center', color: 'var(--muted)' }}>
+                    No students found.{' '}
+                    <button className="btn btn-ghost" style={{ padding: 0, textDecoration: 'underline', color: 'var(--primary)' }} onClick={() => setMode('new')}>
+                      Create new
+                    </button>
+                  </div>
+                ) : (
+                  filteredStudents.map(s => (
+                    <div
+                      key={s.id}
+                      onClick={() => setSelectedExisting(s)}
+                      style={{
+                        padding: '10px 12px',
+                        cursor: 'pointer',
+                        borderBottom: '1px solid var(--border)',
+                        background: selectedExisting?.id === s.id ? 'rgba(37,99,235,0.08)' : undefined,
+                        fontWeight: selectedExisting?.id === s.id ? 600 : 400,
+                      }}
+                    >
+                      {s.first_name} {s.last_name}
+                      {selectedExisting?.id === s.id && <span style={{ float: 'right', color: 'var(--primary)' }}>Selected</span>}
+                    </div>
+                  ))
+                )}
+              </div>
+              {selectedExisting && (
+                <p style={{ marginTop: 8, fontSize: 14 }}>
+                  Selected: <strong>{selectedExisting.first_name} {selectedExisting.last_name}</strong>
+                </p>
+              )}
             </div>
-            <div>
-              <label className="helper">Guardian Phone</label>
-              <input value={guardianPhone} onChange={e => setGuardianPhone(e.target.value)} placeholder="+251..." />
+          ) : (
+            <div style={{ display: 'grid', gap: 12 }}>
+              <div className="grid cols-2" style={{ gap: 10 }}>
+                <div>
+                  <label className="helper">First Name *</label>
+                  <input value={firstName} onChange={e => setFirstName(e.target.value)} placeholder="First name" />
+                </div>
+                <div>
+                  <label className="helper">Last Name *</label>
+                  <input value={lastName} onChange={e => setLastName(e.target.value)} placeholder="Last name" />
+                </div>
+                <div>
+                  <label className="helper">Date of Birth</label>
+                  <input type="date" value={dob} onChange={e => setDob(e.target.value)} />
+                </div>
+                <div>
+                  <label className="helper">Gender</label>
+                  <select value={gender} onChange={e => setGender(e.target.value)}>
+                    <option value="">Select</option>
+                    <option value="male">Male</option>
+                    <option value="female">Female</option>
+                  </select>
+                </div>
+              </div>
+              <hr />
+              <div className="grid cols-2" style={{ gap: 10 }}>
+                <div>
+                  <label className="helper">Guardian Name</label>
+                  <input value={guardianName} onChange={e => setGuardianName(e.target.value)} placeholder="Parent/guardian" />
+                </div>
+                <div>
+                  <label className="helper">Guardian Phone</label>
+                  <input value={guardianPhone} onChange={e => setGuardianPhone(e.target.value)} placeholder="+251..." />
+                </div>
+              </div>
             </div>
-          </div>
+          )}
         </div>
       )}
 
       {/* Step 1: Class */}
       {step === 1 && (
         <div>
-          <label className="helper">Enroll in Class (optional)</label>
+          <label className="helper">Enroll in Class</label>
           <select value={selectedClass} onChange={e => setSelectedClass(e.target.value)}>
             <option value="">Skip — enroll later</option>
             {classes.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
           </select>
-          <p className="helper" style={{ marginTop: 8 }}>You can always enroll the student later from the Classes page.</p>
         </div>
       )}
 
       {/* Step 2: Parent */}
       {step === 2 && (
         <div>
-          <label className="helper">Link to Parent (optional)</label>
+          <label className="helper">Link to Parent</label>
           <select value={selectedParent} onChange={e => setSelectedParent(e.target.value)}>
             <option value="">Skip — link later</option>
             {parents.map(p => <option key={p.id} value={p.id}>{p.full_name}</option>)}
@@ -185,7 +266,6 @@ export const QuickEnrollWizard: React.FC<Props> = ({ open, onClose, schoolId, on
               </select>
             </div>
           )}
-          <p className="helper" style={{ marginTop: 8 }}>You can link parents from the Admin Dashboard anytime.</p>
         </div>
       )}
 
@@ -193,10 +273,9 @@ export const QuickEnrollWizard: React.FC<Props> = ({ open, onClose, schoolId, on
       {step === 3 && (
         <div className="card" style={{ background: 'var(--bg)' }}>
           <div style={{ display: 'grid', gap: 6, fontSize: 14 }}>
-            <div><strong>Student:</strong> {firstName} {lastName}</div>
-            {dob && <div><span className="helper">DOB:</span> {dob}</div>}
-            {gender && <div><span className="helper">Gender:</span> {gender}</div>}
-            {guardianName && <div><span className="helper">Guardian:</span> {guardianName} {guardianPhone && `(${guardianPhone})`}</div>}
+            <div><strong>Student:</strong> {studentName} {mode === 'existing' ? <span className="badge" style={{ marginLeft: 4 }}>Existing</span> : <span className="badge badge-success" style={{ marginLeft: 4 }}>New</span>}</div>
+            {mode === 'new' && dob && <div><span className="helper">DOB:</span> {dob}</div>}
+            {mode === 'new' && guardianName && <div><span className="helper">Guardian:</span> {guardianName}</div>}
             <hr />
             <div><strong>Class:</strong> {selectedClass ? classes.find(c => c.id === selectedClass)?.name : <span className="helper">Skipped</span>}</div>
             <div><strong>Parent:</strong> {selectedParent ? `${parents.find(p => p.id === selectedParent)?.full_name} (${relation})` : <span className="helper">Skipped</span>}</div>
@@ -211,11 +290,11 @@ export const QuickEnrollWizard: React.FC<Props> = ({ open, onClose, schoolId, on
         </button>
         {step < 3 ? (
           <button className="btn btn-primary" onClick={() => setStep(step + 1)} disabled={!canNext()}>
-            {step === 0 ? 'Next' : 'Next (or Skip)'}
+            Next
           </button>
         ) : (
           <button className="btn btn-primary" onClick={handleSubmit} disabled={saving}>
-            {saving ? <><LoadingSpinner size="sm" /> Creating...</> : 'Create & Enroll'}
+            {saving ? <><LoadingSpinner size="sm" /> Enrolling...</> : (mode === 'existing' ? 'Enroll' : 'Create & Enroll')}
           </button>
         )}
       </div>

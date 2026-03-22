@@ -313,6 +313,9 @@ export default function Classes() {
                     {role === 'school_admin' && (
                       <td onClick={e => e.stopPropagation()}>
                         <div style={{ display: 'flex', gap: 6 }}>
+                          <button className="btn btn-primary" style={{ padding: '4px 8px', fontSize: 13 }} onClick={() => toggleEnrollment(c.id)}>
+                            {expandedClass === c.id ? 'Close' : 'Enroll'}
+                          </button>
                           <button className="btn btn-ghost" style={{ padding: '4px 8px', fontSize: 13 }} onClick={() => startEdit(c)}>Edit</button>
                           <button className="btn btn-ghost" style={{ padding: '4px 8px', fontSize: 13, color: '#dc2626' }} onClick={() => handleDelete(c.id, c.name)}>Delete</button>
                         </div>

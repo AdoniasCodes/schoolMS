@@ -35,7 +35,9 @@ export default function Students() {
   const [formGuardianPhone, setFormGuardianPhone] = useState('')
   const [formEmergency, setFormEmergency] = useState('')
   const [formMedical, setFormMedical] = useState('')
+  const [formClassId, setFormClassId] = useState('')
   const [saving, setSaving] = useState(false)
+  const [availableClasses, setAvailableClasses] = useState<{ id: string; name: string }[]>([])
 
   // Edit
   const [editId, setEditId] = useState<string | null>(null)
@@ -65,6 +67,12 @@ export default function Students() {
     const school = sid ?? me?.school_id
     setRole(r)
     setSchoolId(school)
+
+    // Load classes for enrollment dropdown (admin)
+    if (r === 'school_admin') {
+      const { data: cls } = await supabase.from('classes').select('id, name').is('deleted_at', null).order('name')
+      setAvailableClasses(cls ?? [])
+    }
 
     const { data } = await supabase
       .from('students')
@@ -98,7 +106,7 @@ export default function Students() {
   const handleCreate = async () => {
     if (!formFirst.trim() || !formLast.trim() || !schoolId) return
     setSaving(true)
-    const { error } = await supabase.from('students').insert({
+    const { data: student, error } = await supabase.from('students').insert({
       school_id: schoolId,
       first_name: formFirst.trim(),
       last_name: formLast.trim(),
@@ -108,11 +116,21 @@ export default function Students() {
       guardian_phone: formGuardianPhone.trim() || null,
       emergency_contact: formEmergency.trim() || null,
       medical_notes: formMedical.trim() || null,
-    })
+    }).select('id').single()
     if (error) { show(error.message, 'error') }
-    else {
-      show('Student added', 'success')
+    else if (student) {
+      // Auto-enroll in class if selected
+      if (formClassId) {
+        const { error: enrollErr } = await supabase.from('enrollments').insert({
+          school_id: schoolId,
+          class_id: formClassId,
+          student_id: student.id,
+        })
+        if (enrollErr) show(`Student created but enrollment failed: ${enrollErr.message}`, 'error')
+      }
+      show('Student added' + (formClassId ? ' and enrolled' : ''), 'success')
       resetCreateForm()
+      setFormClassId('')
       setShowCreate(false)
       await loadStudents(schoolId)
     }
@@ -228,6 +246,16 @@ export default function Students() {
             <div style={{ marginTop: 12 }}>
               <label className="helper">Medical Notes</label>
               <textarea value={formMedical} onChange={e => setFormMedical(e.target.value)} rows={2} placeholder="Allergies, conditions, or special needs (optional)" />
+            </div>
+
+            <hr />
+            <p className="helper" style={{ margin: '0 0 8px 0' }}>Class Enrollment</p>
+            <div>
+              <label className="helper">Enroll in Class</label>
+              <select value={formClassId} onChange={e => setFormClassId(e.target.value)}>
+                <option value="">Don't enroll yet</option>
+                {availableClasses.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+              </select>
             </div>
 
             <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
