@@ -392,3 +392,84 @@ Notes:
 
 **Roles**: Now 4 roles — super_admin, school_admin, teacher, parent
 **Routes**: Added /app/super for super admin dashboard
+
+**Schema fix**: media_assets table uses `mime_type`, `file_size_bytes`, `daily_update_id` (not `content_type`, `size`, `update_id` as code originally had). All frontend code corrected to match actual DB columns. No `name` column exists — file names derived from `object_path`.
+
+### 2026-04-14 Step 28 — UI/UX Redesign & Charts
+
+**Landing Page Redesign**:
+- Complete rewrite with warm, organic Ethiopian-inspired aesthetic
+- Color palette: deep teal (#1a3a4a), terracotta/amber (#c0702a), cream (#faf6f1), accent teal (#1a8a7a)
+- Typography: DM Serif Display (headings) + Plus Jakarta Sans (body) via Google Fonts
+- Sections: Hero with floating notification cards, Trust bar, Features grid (6 cards with descriptions), How It Works (3 role-based cards with Unsplash photos), For Schools (split layout with checklist), Testimonials (3 cards with star ratings), CTA, Footer with links
+- Scroll-triggered fade-up animations via IntersectionObserver
+- Subtle grain texture overlay for depth
+- High-quality Unsplash images (classroom, children, teacher, books)
+- SEO: meta description, semantic HTML, proper alt text, keyword-rich content
+- Responsive: stacks to single column on mobile, hamburger menu
+- CSS class prefix `lp-` to avoid conflicts with app styles
+
+**Login Page Redesign**:
+- Split-screen layout: left panel (dark teal branding + feature list), right panel (form)
+- Tabbed login: Password mode vs Magic Link mode
+- Input fields with icon prefixes (Mail, Lock from lucide-react)
+- Orange (#c0702a) submit button matching brand
+- Success/error message styling
+- Mobile: left panel hidden, form only
+- CSS class prefix `login-`
+
+**Dashboard Redesign (all 4 dashboards)**:
+- New stat cards with colored top accent bar, large numbers, and subtle background icon
+- New `.dash-header`, `.stat-card`, `.chart-card`, `.quick-action` CSS classes
+- Quick action cards with colored icon circles and hover lift effects
+- Consistent styling across Admin, Teacher, Parent, Super Admin dashboards
+
+**Charts (via recharts library)**:
+- **Admin Dashboard**: Area chart (attendance trend over 7 days, present vs absent), Bar chart (students per class)
+- **Teacher Dashboard**: Pie chart (today's attendance breakdown: present/late/absent), Bar chart (students per class)
+- **Super Admin Dashboard**: Pie chart (subscription status: active/trial/inactive)
+- **Parent Dashboard**: No charts (data-light), but enhanced with media gallery grid, progress report metric badges, expandable update text
+
+**Dependencies added**: `recharts` (charting library)
+
+**Modified files**: Landing.tsx (rewrite), Login.tsx (rewrite), AdminDashboard.tsx (rewrite), TeacherDashboard.tsx (rewrite), ParentDashboard.tsx (updated styling), SuperAdminDashboard.tsx (updated styling + chart), index.html (fonts + meta), styles.css (landing + login + dashboard styles)
+
+**Infrastructure notes**:
+- Supabase keep-alive cron job installed on local machine (every 5 days at midnight)
+- All 5 migrations (0010-0014) executed in Supabase SQL editor
+- Super admin role promoted for founder account
+- Vercel free plan: only one collaborator can push to GitHub — Claude must never git push, only provide commands
+
+## Current State Summary (as of Step 28)
+
+### Roles & Routing
+| Role | Dashboard Route | Nav Items |
+|------|----------------|-----------|
+| super_admin | /app/super | Overview, Settings |
+| school_admin | /app/admin | All school features |
+| teacher | /app/teacher | All school features |
+| parent | /app/parent | All school features |
+
+### Database Tables (15 + 1 junction)
+roles, users, schools, teachers, parents, students, parent_students, classes, enrollments, attendance, daily_updates, messages, progress_reports, announcements, media_assets, announcement_recipients
+
+### Key Schema Details
+- `schools`: has subscription_status (trial/active/suspended/cancelled), subscription_plan, trial_ends_at, max_students, max_teachers
+- `messages`: teacher_id is NULLABLE (allows admin-to-parent direct messages)
+- `media_assets`: links to daily_update_id, message_id, announcement_id, progress_report_id
+- `announcement_recipients`: junction table for targeted parent announcements
+- Storage bucket: `media` (private, 50MB, image/*/video/*/application/pdf)
+
+### Frontend Components
+**Pages (17)**: Landing, Login, AccountInactive, Dashboard, AdminDashboard, TeacherDashboard, ParentDashboard, SuperAdminDashboard, Classes, Students, Attendance, Updates, Announcements, Messages, Reports, BulkImport, Settings
+**Reusable**: Modal, QuickEnrollWizard, FileUpload, ParentMultiSelect, LoadingSpinner, ToastProvider, ThemeProvider, AppShell
+
+### Tech Stack
+- Frontend: React 18 + TypeScript + Vite 5
+- Backend: Supabase (Auth, Postgres, Storage, RLS)
+- Charting: recharts
+- Icons: lucide-react
+- Excel: xlsx (SheetJS)
+- Fonts: DM Serif Display, Plus Jakarta Sans (Google Fonts)
+- Hosting: Vercel (frontend), Supabase (backend) — both free tier
+- Deployment: GitHub → Vercel auto-deploy on push to main
