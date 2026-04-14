@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { supabase } from '@/lib/supabaseClient'
 import { useToast } from '@/ui/components/toast/ToastProvider'
 import { LoadingSpinner } from '@/ui/components/LoadingSpinner'
+import { FileUpload } from '@/ui/components/FileUpload'
 
 interface ClassRow { id: string; name: string }
 interface UpdateRow { id: string; class_id: string; teacher_id: string; text_content: string | null; created_at: string }
@@ -9,6 +10,7 @@ interface UpdateRow { id: string; class_id: string; teacher_id: string; text_con
 export default function Updates() {
   const [role, setRole] = useState<'teacher' | 'parent' | 'school_admin' | null>(null)
   const [schoolId, setSchoolId] = useState<string>('')
+  const [userId, setUserId] = useState<string>('')
   const [teacherId, setTeacherId] = useState<string>('')
   const [classes, setClasses] = useState<ClassRow[]>([])
   const [selectedClass, setSelectedClass] = useState<string>('')
@@ -16,11 +18,10 @@ export default function Updates() {
   const [posting, setPosting] = useState(false)
   const [feed, setFeed] = useState<UpdateRow[]>([])
   const [loadingFeed, setLoadingFeed] = useState(false)
-  const [file, setFile] = useState<File | null>(null)
+  const [pendingUpdateId, setPendingUpdateId] = useState<string | null>(null)
   const [page, setPage] = useState(0)
   const pageSize = 10
   const { show } = useToast()
-  const [uploading, setUploading] = useState(false)
   const [mediaMap, setMediaMap] = useState<Record<string, { url: string; name: string } | null>>({})
   const [feedError, setFeedError] = useState<string | null>(null)
 
@@ -28,6 +29,7 @@ export default function Updates() {
     const init = async () => {
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) return
+      setUserId(user.id)
       const { data: userRow } = await supabase.from('users').select('role_key, school_id').eq('id', user.id).maybeSingle()
       if (userRow) {
         setRole(userRow.role_key)
@@ -75,9 +77,8 @@ export default function Updates() {
   const post = async () => {
     if (!canPost || !selectedClass || !text.trim()) return
     setPosting(true)
-    
+
     try {
-      // 1. Create the update first
       const { data: update, error: updateError } = await supabase
         .from('daily_updates')
         .insert({
@@ -88,24 +89,14 @@ export default function Updates() {
         })
         .select('id')
         .single()
-      
+
       if (updateError) throw updateError
-      
-      // 2. If there's a file, upload and associate it with this update
-      if (file) {
-        try {
-          await uploadMedia(update.id)
-        } catch (err) {
-          console.error('Media upload failed, but update was posted', err)
-          // Continue even if media upload fails
-        }
-      }
-      
-      // 3. Refresh the feed
+
+      // Set the pending update ID so FileUpload can associate media
+      setPendingUpdateId(update.id)
       setText('')
-      setFile(null)
       await loadFeed()
-      show('Update posted' + (file ? ' with media' : ''), 'success')
+      show('Update posted! You can now attach media below.', 'success')
     } catch (error: any) {
       console.error('Post error:', error)
       show(error.message || 'Failed to post update', 'error')
@@ -114,52 +105,10 @@ export default function Updates() {
     }
   }
 
-  const uploadMedia = async (updateId?: string) => {
-    if (!file) return
-    if (!schoolId || !teacherId) { 
-      show('Missing teacher/school context', 'error'); 
-      return 
-    }
-    
-    const path = `${schoolId}/updates/${teacherId}/${Date.now()}_${file.name.replace(/[^\w.]+/g, '_')}`
-    setUploading(true)
-    
-    try {
-      // 1. Upload the file to storage
-      const { error: upErr } = await supabase.storage
-        .from('media')
-        .upload(path, file, { 
-          upsert: false,
-          contentType: file.type || 'application/octet-stream'
-        })
-      
-      if (upErr) throw upErr
-      
-      // 2. Create media_asset record with update_id if available
-      const { error: dbErr } = await supabase
-        .from('media_assets')
-        .insert({
-          bucket: 'media',
-          object_path: path,
-          name: file.name,
-          school_id: schoolId,
-          update_id: updateId || null,
-          content_type: file.type || 'application/octet-stream',
-          size: file.size,
-        })
-      
-      if (dbErr) throw dbErr
-      
-      show('Media uploaded', 'success')
-      return path
-    } catch (error: any) {
-      console.error('Upload error:', error)
-      show(error.message || 'Failed to upload media', 'error')
-      throw error
-    } finally {
-      setUploading(false)
-      setFile(null)
-    }
+  const handleMediaUploaded = (_path: string, _assetId: string) => {
+    show('Media attached to update', 'success')
+    setPendingUpdateId(null)
+    loadFeed()
   }
 
   const loadMediaPreviews = async (items: UpdateRow[]) => {
@@ -169,8 +118,8 @@ export default function Updates() {
     // Get all media for these updates in one query
     const { data: mediaItems, error } = await supabase
       .from('media_assets')
-      .select('id, object_path, name, update_id')
-      .in('update_id', items.map(u => u.id))
+      .select('id, object_path, daily_update_id')
+      .in('daily_update_id', items.map(u => u.id))
       .eq('school_id', schoolId)
     
     if (error) {
@@ -180,21 +129,21 @@ export default function Updates() {
     
     // Create signed URLs for each media item
     for (const item of mediaItems || []) {
-      if (!item.update_id) continue
+      if (!item.daily_update_id) continue
       try {
         const { data: signed } = await supabase.storage
           .from('media')
           .createSignedUrl(item.object_path, 60 * 60) // 1 hour expiry
         
         if (signed) {
-          next[item.update_id] = {
+          next[item.daily_update_id] = {
             url: signed.signedUrl,
-            name: item.name || 'Media'
+            name: item.object_path.split('/').pop() || 'Media'
           }
         }
       } catch (err) {
         console.error('Error creating signed URL:', err)
-        next[item.update_id] = null
+        next[item.daily_update_id] = null
       }
     }
     
@@ -222,40 +171,31 @@ export default function Updates() {
             rows={3}
             style={{ width: '100%' }}
           />
-          <div style={{ marginTop: 8, display:'flex', gap:8, alignItems:'center' }}>
-            <input 
-              type="file" 
-              id="media-upload"
-              aria-label="Attach media" 
-              onChange={(e) => setFile(e.target.files?.[0] ?? null)} 
-              className="visually-hidden"
-            />
-            <label 
-              htmlFor="media-upload" 
-              className="btn btn-secondary"
-              style={{ display: 'inline-flex', alignItems: 'center', gap: '0.5rem' }}
-            >
-              {uploading ? (
-                <>
-                  <LoadingSpinner size="sm" />
-                  Uploading...
-                </>
-              ) : 'Attach Media'}
-            </label>
-            <button 
-              className="btn btn-primary" 
-              onClick={post} 
+          <div style={{ marginTop: 8, display: 'flex', gap: 8, alignItems: 'center' }}>
+            <button
+              className="btn btn-primary"
+              onClick={post}
               disabled={posting || !selectedClass || !text.trim()}
-              style={{ minWidth: '100px', display: 'inline-flex', justifyContent: 'center', gap: '0.5rem' }}
+              style={{ minWidth: 100, display: 'inline-flex', justifyContent: 'center', gap: '0.5rem' }}
             >
-              {posting ? (
-                <>
-                  <LoadingSpinner size="sm" />
-                  Posting...
-                </>
-              ) : 'Post'}
+              {posting ? <><LoadingSpinner size="sm" /> Posting...</> : 'Post'}
             </button>
           </div>
+          {pendingUpdateId && (
+            <div style={{ marginTop: 12 }}>
+              <label style={{ fontSize: 13, color: 'var(--muted)', marginBottom: 4, display: 'block' }}>Attach media to this update:</label>
+              <FileUpload
+                schoolId={schoolId}
+                uploadedBy={userId}
+                folder="updates"
+                associationField="daily_update_id"
+                associationId={pendingUpdateId}
+                onUploadComplete={handleMediaUploaded}
+                onError={(msg) => show(msg, 'error')}
+                compact
+              />
+            </div>
+          )}
         </div>
       )}
 

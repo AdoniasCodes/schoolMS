@@ -16,7 +16,18 @@
       "Bash(git push:*)",
       "Bash(git add:*)",
       "Bash(/opt/homebrew/bin/npx tsc:*)",
-      "Bash(git config:*)"
+      "Bash(git config:*)",
+      "Bash(/opt/homebrew/bin/npm install:*)",
+      "Bash(wc -l /Users/eyoel/vibecoding/schoolMS/frontend/src/pages/*.tsx)",
+      "Bash(textutil:*)",
+      "Bash(chmod +x:*)",
+      "Bash(npm run:*)",
+      "Bash(crontab -l)",
+      "Bash(crontab -)",
+      "Bash(SUPABASE_URL=https://jtvjptwmciizqccrpunj.supabase.co SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imp0dmpwdHdtY2lpenFjY3JwdW5qIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjgxNDgxNDcsImV4cCI6MjA4MzcyNDE0N30.0-uq48L-jg9f1Nzikz4zSFLAo1QQ54Mk81HLqNOTvM8 /Users/eyoel/vibecoding/schoolMS/scripts/keep-alive.sh:*)",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\" http://localhost:5173/)",
+      "Bash(lsof -ti:5173)",
+      "Bash(xargs kill:*)"
     ]
   }
 }

@@ -2,15 +2,19 @@ import { useEffect, useState, useRef } from 'react'
 import { supabase } from '@/lib/supabaseClient'
 import { useToast } from '@/ui/components/toast/ToastProvider'
 import { LoadingSpinner } from '@/ui/components/LoadingSpinner'
+import { FileUpload } from '@/ui/components/FileUpload'
+import { ParentMultiSelect } from '@/ui/components/ParentMultiSelect'
+import { Modal } from '@/ui/components/Modal'
 
 interface Conversation {
   parent_id: string
-  teacher_id: string
+  teacher_id: string | null
   student_id: string | null
   other_name: string
   student_name: string
   last_message: string
   last_at: string
+  is_admin_convo: boolean
 }
 
 interface Message {
@@ -33,7 +37,7 @@ export default function Messages() {
 
   // Conversations
   const [conversations, setConversations] = useState<Conversation[]>([])
-  const [activeConvo, setActiveConvo] = useState<{ parent_id: string; teacher_id: string; student_id: string | null } | null>(null)
+  const [activeConvo, setActiveConvo] = useState<{ parent_id: string; teacher_id: string | null; student_id: string | null } | null>(null)
 
   // Thread
   const [messages, setMessages] = useState<Message[]>([])
@@ -41,11 +45,18 @@ export default function Messages() {
   const [newMsg, setNewMsg] = useState('')
   const [sending, setSending] = useState(false)
   const bottomRef = useRef<HTMLDivElement>(null)
+  const [lastSentMsgId, setLastSentMsgId] = useState<string | null>(null)
 
-  // New conversation (for starting a chat)
+  // New conversation
   const [showNewConvo, setShowNewConvo] = useState(false)
-  const [convoTargets, setConvoTargets] = useState<{ id: string; name: string; student_name: string; student_id: string }[]>([])
+  const [convoTargets, setConvoTargets] = useState<{ id: string; name: string; student_name: string; student_id: string | null }[]>([])
   const [selectedTarget, setSelectedTarget] = useState('')
+
+  // Bulk messaging (admin)
+  const [showBulkModal, setShowBulkModal] = useState(false)
+  const [bulkParents, setBulkParents] = useState<string[]>([])
+  const [bulkText, setBulkText] = useState('')
+  const [bulkSending, setBulkSending] = useState(false)
 
   useEffect(() => {
     const init = async () => {
@@ -68,7 +79,6 @@ export default function Messages() {
         setTeacherId(t?.id ?? null)
         if (t?.id) await loadConversations(r, null, t.id)
       } else if (r === 'school_admin') {
-        // Admin sees all school messages
         await loadConversations(r, null, null)
       }
 
@@ -80,7 +90,7 @@ export default function Messages() {
   const loadConversations = async (r: Role, pid: string | null, tid: string | null) => {
     let query = supabase
       .from('messages')
-      .select('parent_id, teacher_id, student_id, text_content, created_at, parents(users(full_name)), teachers(users(full_name)), students(first_name, last_name)')
+      .select('parent_id, teacher_id, student_id, text_content, created_at, sender_id, parents(users(full_name)), teachers(users(full_name)), students(first_name, last_name)')
       .order('created_at', { ascending: false })
 
     if (r === 'parent' && pid) query = query.eq('parent_id', pid)
@@ -89,16 +99,21 @@ export default function Messages() {
     const { data } = await query
     if (!data) return
 
-    // Group by (parent_id, teacher_id, student_id) and take the latest message
     const convoMap = new Map<string, Conversation>()
     for (const msg of data as any[]) {
-      const key = `${msg.parent_id}|${msg.teacher_id}|${msg.student_id ?? ''}`
+      const key = `${msg.parent_id}|${msg.teacher_id ?? 'admin'}|${msg.student_id ?? ''}`
       if (!convoMap.has(key)) {
-        const otherName = r === 'parent'
-          ? (msg.teachers?.users?.full_name ?? 'Teacher')
-          : r === 'school_admin'
-            ? `${msg.parents?.users?.full_name ?? 'Parent'} ↔ ${msg.teachers?.users?.full_name ?? 'Teacher'}`
-            : (msg.parents?.users?.full_name ?? 'Parent')
+        const isAdminConvo = msg.teacher_id === null
+        let otherName: string
+        if (r === 'parent') {
+          otherName = isAdminConvo ? 'School Admin' : (msg.teachers?.users?.full_name ?? 'Teacher')
+        } else if (r === 'school_admin') {
+          otherName = isAdminConvo
+            ? (msg.parents?.users?.full_name ?? 'Parent')
+            : `${msg.parents?.users?.full_name ?? 'Parent'} \u2194 ${msg.teachers?.users?.full_name ?? 'Teacher'}`
+        } else {
+          otherName = msg.parents?.users?.full_name ?? 'Parent'
+        }
         convoMap.set(key, {
           parent_id: msg.parent_id,
           teacher_id: msg.teacher_id,
@@ -107,6 +122,7 @@ export default function Messages() {
           student_name: msg.students ? `${msg.students.first_name} ${msg.students.last_name}` : '',
           last_message: msg.text_content,
           last_at: msg.created_at,
+          is_admin_convo: isAdminConvo,
         })
       }
     }
@@ -114,7 +130,6 @@ export default function Messages() {
 
     // Load targets for new conversation
     if (r === 'parent' && pid) {
-      // Get teachers of my children's classes
       const { data: ps } = await supabase
         .from('parent_students')
         .select('students(id, first_name, last_name, enrollments(classes(teacher_id, teachers(id, users(full_name)))))')
@@ -138,7 +153,6 @@ export default function Messages() {
       }
       setConvoTargets(targets)
     } else if (r === 'teacher' && tid) {
-      // Get parents of enrolled students
       const { data: cls } = await supabase.from('classes').select('id').eq('teacher_id', tid).is('deleted_at', null)
       const classIds = (cls ?? []).map(c => c.id)
       if (classIds.length > 0) {
@@ -171,20 +185,44 @@ export default function Messages() {
         }
         setConvoTargets(targets)
       }
+    } else if (r === 'school_admin') {
+      // Admin can message any parent in the school
+      const { data: allParents } = await supabase
+        .from('parents')
+        .select('id, users(full_name)')
+        .is('deleted_at', null)
+
+      const targets: typeof convoTargets = []
+      for (const p of allParents ?? []) {
+        targets.push({
+          id: p.id,
+          name: (p as any).users?.full_name ?? 'Parent',
+          student_name: '',
+          student_id: null,
+        })
+      }
+      setConvoTargets(targets)
     }
   }
 
-  const openThread = async (convo: { parent_id: string; teacher_id: string; student_id: string | null }) => {
+  const openThread = async (convo: { parent_id: string; teacher_id: string | null; student_id: string | null }) => {
     setActiveConvo(convo)
     setLoadingThread(true)
     let query = supabase
       .from('messages')
       .select('id, text_content, sender_id, created_at')
       .eq('parent_id', convo.parent_id)
-      .eq('teacher_id', convo.teacher_id)
       .order('created_at', { ascending: true })
 
+    // Handle null teacher_id (admin conversations) vs regular teacher conversations
+    if (convo.teacher_id) {
+      query = query.eq('teacher_id', convo.teacher_id)
+    } else {
+      query = query.is('teacher_id', null)
+    }
+
     if (convo.student_id) query = query.eq('student_id', convo.student_id)
+    else query = query.is('student_id', null)
 
     const { data } = await query
     setMessages(data ?? [])
@@ -195,17 +233,18 @@ export default function Messages() {
   const sendMessage = async () => {
     if (!newMsg.trim() || !activeConvo || !userId || !schoolId) return
     setSending(true)
-    const { error } = await supabase.from('messages').insert({
+    const { data, error } = await supabase.from('messages').insert({
       school_id: schoolId,
       parent_id: activeConvo.parent_id,
       teacher_id: activeConvo.teacher_id,
       student_id: activeConvo.student_id,
       sender_id: userId,
       text_content: newMsg.trim(),
-    })
+    }).select('id').single()
     if (error) { show(error.message, 'error') }
     else {
       setNewMsg('')
+      setLastSentMsgId(data?.id ?? null)
       await openThread(activeConvo)
     }
     setSending(false)
@@ -213,6 +252,22 @@ export default function Messages() {
 
   const startNewConversation = () => {
     if (!selectedTarget) return
+
+    if (role === 'school_admin') {
+      // Admin starts direct conversation with parent (no teacher, no student)
+      const target = convoTargets.find(t => t.id === selectedTarget)
+      if (!target) return
+      const convo = {
+        parent_id: target.id,
+        teacher_id: null,
+        student_id: null,
+      }
+      setShowNewConvo(false)
+      setSelectedTarget('')
+      openThread(convo)
+      return
+    }
+
     const target = convoTargets.find(t => `${t.id}-${t.student_id}` === selectedTarget)
     if (!target) return
 
@@ -224,6 +279,40 @@ export default function Messages() {
     setShowNewConvo(false)
     setSelectedTarget('')
     openThread(convo)
+  }
+
+  // Admin can send in their own conversations (teacher_id is null) but is read-only on teacher-parent threads
+  const canSendInActiveConvo = (): boolean => {
+    if (!activeConvo) return false
+    if (role === 'parent' || role === 'teacher') return true
+    if (role === 'school_admin') return activeConvo.teacher_id === null
+    return false
+  }
+
+  const sendBulkMessages = async () => {
+    if (!bulkText.trim() || bulkParents.length === 0 || !schoolId || !userId) return
+    setBulkSending(true)
+
+    const rows = bulkParents.map(pid => ({
+      school_id: schoolId,
+      parent_id: pid,
+      teacher_id: null,
+      student_id: null,
+      sender_id: userId,
+      text_content: bulkText.trim(),
+    }))
+
+    const { error } = await supabase.from('messages').insert(rows)
+    if (error) {
+      show('Failed to send: ' + error.message, 'error')
+    } else {
+      show(`Message sent to ${bulkParents.length} parent${bulkParents.length !== 1 ? 's' : ''}`, 'success')
+      setBulkText('')
+      setBulkParents([])
+      setShowBulkModal(false)
+      await loadConversations(role!, null, null)
+    }
+    setBulkSending(false)
   }
 
   if (loading) return (
@@ -242,26 +331,41 @@ export default function Messages() {
     )
   }
 
+  const convoKey = (c: { parent_id: string; teacher_id: string | null; student_id: string | null }) =>
+    `${c.parent_id}|${c.teacher_id ?? 'admin'}|${c.student_id ?? ''}`
+
   return (
     <div style={{ display: 'grid', gridTemplateColumns: activeConvo ? '300px 1fr' : '1fr', gap: 12, minHeight: 'calc(100vh - 120px)' }}>
       {/* Conversation list */}
       <div className="card" style={{ padding: 0, overflow: 'hidden', display: activeConvo ? undefined : 'block' }}>
         <div style={{ padding: '12px 16px', borderBottom: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <h3 style={{ margin: 0 }}>Conversations</h3>
-          {convoTargets.length > 0 && role !== 'school_admin' && (
-            <button className="btn btn-primary" style={{ padding: '6px 10px', fontSize: 13 }} onClick={() => setShowNewConvo(!showNewConvo)}>
-              + New
-            </button>
-          )}
+          <div style={{ display: 'flex', gap: 6 }}>
+            {role === 'school_admin' && (
+              <button className="btn btn-secondary" style={{ padding: '6px 10px', fontSize: 13 }} onClick={() => setShowBulkModal(true)}>
+                Bulk
+              </button>
+            )}
+            {convoTargets.length > 0 && (
+              <button className="btn btn-primary" style={{ padding: '6px 10px', fontSize: 13 }} onClick={() => setShowNewConvo(!showNewConvo)}>
+                + New
+              </button>
+            )}
+          </div>
         </div>
 
         {showNewConvo && (
           <div style={{ padding: '8px 16px', borderBottom: '1px solid var(--border)', background: 'var(--bg)' }}>
-            <select value={selectedTarget} onChange={e => setSelectedTarget(e.target.value)} style={{ padding: '6px 8px', fontSize: 13 }}>
-              <option value="">Select {role === 'parent' ? 'teacher' : 'parent'}...</option>
+            <select value={selectedTarget} onChange={e => setSelectedTarget(e.target.value)} style={{ padding: '6px 8px', fontSize: 13, width: '100%' }}>
+              <option value="">
+                {role === 'school_admin' ? 'Select parent...' : role === 'parent' ? 'Select teacher...' : 'Select parent...'}
+              </option>
               {convoTargets.map(t => (
-                <option key={`${t.id}-${t.student_id}`} value={`${t.id}-${t.student_id}`}>
-                  {t.name} (re: {t.student_name})
+                <option
+                  key={role === 'school_admin' ? t.id : `${t.id}-${t.student_id}`}
+                  value={role === 'school_admin' ? t.id : `${t.id}-${t.student_id}`}
+                >
+                  {t.name}{t.student_name ? ` (re: ${t.student_name})` : ''}
                 </option>
               ))}
             </select>
@@ -278,8 +382,8 @@ export default function Messages() {
         ) : (
           <div>
             {conversations.map(c => {
-              const key = `${c.parent_id}|${c.teacher_id}|${c.student_id ?? ''}`
-              const isActive = activeConvo && `${activeConvo.parent_id}|${activeConvo.teacher_id}|${activeConvo.student_id ?? ''}` === key
+              const key = convoKey(c)
+              const isActive = activeConvo && convoKey(activeConvo) === key
               return (
                 <div
                   key={key}
@@ -291,7 +395,18 @@ export default function Messages() {
                     background: isActive ? 'rgba(37,99,235,0.08)' : undefined,
                   }}
                 >
-                  <div style={{ fontWeight: 500 }}>{c.other_name}</div>
+                  <div style={{ fontWeight: 500, display: 'flex', alignItems: 'center', gap: 6 }}>
+                    {c.other_name}
+                    {c.is_admin_convo && role === 'school_admin' && (
+                      <span className="badge badge-info" style={{ fontSize: 10 }}>Direct</span>
+                    )}
+                    {c.is_admin_convo && role === 'parent' && (
+                      <span className="badge badge-info" style={{ fontSize: 10 }}>Admin</span>
+                    )}
+                    {!c.is_admin_convo && role === 'school_admin' && (
+                      <span className="badge" style={{ fontSize: 10 }}>View only</span>
+                    )}
+                  </div>
                   {c.student_name && <div className="helper" style={{ fontSize: 11 }}>re: {c.student_name}</div>}
                   <div className="helper" style={{ marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                     {c.last_message}
@@ -309,9 +424,11 @@ export default function Messages() {
           {/* Header */}
           <div style={{ padding: '12px 16px', borderBottom: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <div>
-              <strong>{conversations.find(c => c.parent_id === activeConvo.parent_id && c.teacher_id === activeConvo.teacher_id)?.other_name ?? 'Chat'}</strong>
+              <strong>
+                {conversations.find(c => convoKey(c) === convoKey(activeConvo))?.other_name ?? 'Chat'}
+              </strong>
               <span className="helper" style={{ marginLeft: 8 }}>
-                {conversations.find(c => c.parent_id === activeConvo.parent_id && c.teacher_id === activeConvo.teacher_id)?.student_name}
+                {conversations.find(c => convoKey(c) === convoKey(activeConvo))?.student_name}
               </span>
             </div>
             <button className="btn btn-ghost" style={{ padding: '4px 8px', fontSize: 13 }} onClick={() => setActiveConvo(null)}>Close</button>
@@ -348,27 +465,77 @@ export default function Messages() {
             <div ref={bottomRef} />
           </div>
 
-          {/* Input (hidden for admin - read-only view) */}
-          {role !== 'school_admin' && (
-            <div style={{ padding: '8px 16px', borderTop: '1px solid var(--border)', display: 'flex', gap: 8 }}>
-              <input
-                value={newMsg}
-                onChange={e => setNewMsg(e.target.value)}
-                onKeyDown={e => e.key === 'Enter' && !e.shiftKey && sendMessage()}
-                placeholder="Type a message..."
-                style={{ flex: 1, padding: '8px 12px' }}
-              />
-              <button className="btn btn-primary" onClick={sendMessage} disabled={sending || !newMsg.trim()}>
-                {sending ? <LoadingSpinner size="sm" /> : 'Send'}
-              </button>
+          {/* Input */}
+          {canSendInActiveConvo() ? (
+            <div style={{ padding: '8px 16px', borderTop: '1px solid var(--border)' }}>
+              <div style={{ display: 'flex', gap: 8 }}>
+                <input
+                  value={newMsg}
+                  onChange={e => setNewMsg(e.target.value)}
+                  onKeyDown={e => e.key === 'Enter' && !e.shiftKey && sendMessage()}
+                  placeholder="Type a message..."
+                  style={{ flex: 1, padding: '8px 12px' }}
+                />
+                <button className="btn btn-primary" onClick={sendMessage} disabled={sending || !newMsg.trim()}>
+                  {sending ? <LoadingSpinner size="sm" /> : 'Send'}
+                </button>
+              </div>
+              {lastSentMsgId && schoolId && userId && (
+                <div style={{ marginTop: 6 }}>
+                  <FileUpload
+                    schoolId={schoolId}
+                    uploadedBy={userId}
+                    folder="messages"
+                    associationField="message_id"
+                    associationId={lastSentMsgId}
+                    onUploadComplete={() => { show('File attached', 'success'); setLastSentMsgId(null) }}
+                    onError={(msg) => show(msg, 'error')}
+                    compact
+                  />
+                </div>
+              )}
             </div>
-          )}
-          {role === 'school_admin' && (
+          ) : (
             <div style={{ padding: '8px 16px', borderTop: '1px solid var(--border)', textAlign: 'center' }}>
-              <span className="helper">Read-only view — admin cannot send messages</span>
+              <span className="helper">Read-only view \u2014 this is a teacher-parent conversation</span>
             </div>
           )}
         </div>
+      )}
+      {/* Bulk message modal (admin only) */}
+      {showBulkModal && schoolId && (
+        <Modal open={showBulkModal} onClose={() => setShowBulkModal(false)} title="Message Multiple Parents" wide>
+          <div style={{ display: 'grid', gap: 16 }}>
+            <div>
+              <label className="helper" style={{ marginBottom: 6, display: 'block' }}>Select Parents</label>
+              <ParentMultiSelect
+                schoolId={schoolId}
+                selectedParentIds={bulkParents}
+                onChange={setBulkParents}
+              />
+            </div>
+            <div>
+              <label className="helper" style={{ marginBottom: 6, display: 'block' }}>Message</label>
+              <textarea
+                value={bulkText}
+                onChange={e => setBulkText(e.target.value)}
+                rows={4}
+                placeholder="Type your message to all selected parents..."
+                style={{ width: '100%' }}
+              />
+            </div>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <button
+                className="btn btn-primary"
+                onClick={sendBulkMessages}
+                disabled={bulkSending || !bulkText.trim() || bulkParents.length === 0}
+              >
+                {bulkSending ? <><LoadingSpinner size="sm" /> Sending...</> : `Send to ${bulkParents.length} parent${bulkParents.length !== 1 ? 's' : ''}`}
+              </button>
+              <button className="btn btn-secondary" onClick={() => setShowBulkModal(false)}>Cancel</button>
+            </div>
+          </div>
+        </Modal>
       )}
     </div>
   )

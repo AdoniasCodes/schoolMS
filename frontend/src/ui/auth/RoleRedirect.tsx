@@ -11,7 +11,8 @@ export default function RoleRedirect() {
       if (!user) { navigate('/login', { replace: true }); return }
       const { data } = await supabase.from('users').select('role_key').eq('id', user.id).maybeSingle()
       const role = data?.role_key
-      if (role === 'school_admin') navigate('/app/admin', { replace: true })
+      if (role === 'super_admin') navigate('/app/super', { replace: true })
+      else if (role === 'school_admin') navigate('/app/admin', { replace: true })
       else if (role === 'teacher') navigate('/app/teacher', { replace: true })
       else if (role === 'parent') navigate('/app/parent', { replace: true })
       else navigate('/app/teacher', { replace: true })

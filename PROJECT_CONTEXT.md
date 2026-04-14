@@ -358,3 +358,37 @@ Notes:
 - New reusable components: Modal.tsx, QuickEnrollWizard.tsx
 - New CSS: dropzone, tabs, modal overlay, step indicator
 - New dependency: xlsx (SheetJS) for Excel parsing
+
+### 2026-04-12 Step 27 — Business Model & Feature Completion Sprint
+**Business Decision**: Centralized multi-tenant SaaS model. One Supabase project + one Vercel deployment serves all schools. Schools are tenants. Founders control access via subscription status.
+
+**Migrations added**:
+- `0010_school_subscription.sql`: Added subscription_status, subscription_plan, trial_ends_at, suspended_at, max_students, max_teachers to schools table
+- `0011_media_assets_message_id.sql`: Added message_id FK to media_assets, expanded allowed MIME types to include PDF
+- `0012_admin_parent_messaging.sql`: Made messages.teacher_id nullable, relaxed CHECK constraint, updated RLS for admin messaging
+- `0013_targeted_announcements.sql`: Created announcement_recipients table for targeted parent announcements, updated announcement RLS with 3-tier visibility
+- `0014_super_admin_role.sql`: Added super_admin role, is_super_admin() helper, updated ALL table RLS policies with super_admin bypass
+
+**Features built**:
+- **Supabase Keep-Alive Script** (`scripts/keep-alive.sh`): Cron job pings DB every 5 days to prevent free-tier auto-pause
+- **Subscription Gate**: RequireAuth checks school subscription status. Suspended/cancelled/expired trial shows AccountInactive page. Super admin bypasses.
+- **Reusable FileUpload Component** (`ui/components/FileUpload.tsx`): Extracted from Updates.tsx. Supports drag-drop, preview, compact mode. Works for updates, messages, announcements.
+- **Admin-to-Parent Direct Messaging**: Admins can now start conversations with parents directly (teacher_id=null). Admins remain read-only on teacher-parent threads. File attachments via FileUpload.
+- **Targeted Announcements**: New "Specific Parents" audience option with ParentMultiSelect component. Announcement recipients stored in junction table. Parents only see announcements targeted to them.
+- **Bulk Messaging**: Admin can message multiple parents at once via modal with ParentMultiSelect.
+- **Super Admin Dashboard** (`pages/SuperAdminDashboard.tsx`): Cross-school stats (schools, students, teachers, parents). Schools management table with subscription status/plan editing. Add School form. Dedicated nav (Overview, Settings).
+- **Parent Dashboard Enhancements**: Unread message badge, progress report summaries with metric badges, media gallery thumbnails, expandable update text with inline media, enriched announcements with body preview/class badge/"New" indicator.
+
+**New files**:
+- `scripts/keep-alive.sh`
+- `supabase/migrations/0010-0014` (5 migrations)
+- `supabase/scripts/promote_to_super_admin.sql`
+- `frontend/src/ui/components/FileUpload.tsx`
+- `frontend/src/ui/components/ParentMultiSelect.tsx`
+- `frontend/src/pages/SuperAdminDashboard.tsx`
+- `frontend/src/pages/AccountInactive.tsx`
+
+**Modified files**: Updates.tsx, Messages.tsx, Announcements.tsx, ParentDashboard.tsx, App.tsx, RoleRedirect.tsx, AppShell.tsx, RequireAuth.tsx
+
+**Roles**: Now 4 roles — super_admin, school_admin, teacher, parent
+**Routes**: Added /app/super for super admin dashboard

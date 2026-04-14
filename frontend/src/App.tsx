@@ -16,6 +16,7 @@ import RoleRedirect from '@/ui/auth/RoleRedirect'
 import AdminDashboard from '@/pages/AdminDashboard'
 import TeacherDashboard from '@/pages/TeacherDashboard'
 import ParentDashboard from '@/pages/ParentDashboard'
+import SuperAdminDashboard from '@/pages/SuperAdminDashboard'
 
 export default function App() {
   return (
@@ -27,6 +28,7 @@ export default function App() {
       {/* Protected app routes under /app */}
       <Route path="/app" element={<ProtectedLayout />}>
         <Route index element={<RoleRedirect />} />
+        <Route path="super" element={<SuperAdminDashboard />} />
         <Route path="admin" element={<AdminDashboard />} />
         <Route path="teacher" element={<TeacherDashboard />} />
         <Route path="parent" element={<ParentDashboard />} />

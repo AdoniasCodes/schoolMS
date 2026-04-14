@@ -1,11 +1,45 @@
 import { useEffect, useState } from 'react'
 import { Navigate, useLocation } from 'react-router-dom'
 import { supabase } from '@/lib/supabaseClient'
+import AccountInactive from '@/pages/AccountInactive'
+
+type SubStatus = 'ok' | 'suspended' | 'cancelled' | 'trial_expired'
 
 export default function RequireAuth({ children }: { children: JSX.Element }) {
   const [loading, setLoading] = useState(true)
   const [isAuthed, setIsAuthed] = useState(false)
+  const [subStatus, setSubStatus] = useState<SubStatus>('ok')
   const loc = useLocation()
+
+  const checkSubscription = async (userId: string) => {
+    const { data: user } = await supabase
+      .from('users')
+      .select('role_key, school_id')
+      .eq('id', userId)
+      .single()
+
+    // Super admin has no school — always allowed
+    if (!user || user.role_key === 'super_admin' || !user.school_id) {
+      setSubStatus('ok')
+      return
+    }
+
+    const { data: school } = await supabase
+      .from('schools')
+      .select('subscription_status, trial_ends_at')
+      .eq('id', user.school_id)
+      .single()
+
+    if (!school) { setSubStatus('ok'); return }
+
+    if (school.subscription_status === 'suspended' || school.subscription_status === 'cancelled') {
+      setSubStatus(school.subscription_status as SubStatus)
+    } else if (school.subscription_status === 'trial' && school.trial_ends_at && new Date(school.trial_ends_at) < new Date()) {
+      setSubStatus('trial_expired')
+    } else {
+      setSubStatus('ok')
+    }
+  }
 
   useEffect(() => {
     let cancelled = false
@@ -15,34 +49,41 @@ export default function RequireAuth({ children }: { children: JSX.Element }) {
       return !!(h.get('access_token') || h.get('refresh_token') || q.get('code'))
     }
 
+    const finishAuth = async (userId: string) => {
+      if (cancelled) return
+      await checkSubscription(userId)
+      if (!cancelled) {
+        setIsAuthed(true)
+        setLoading(false)
+      }
+    }
+
     const init = async () => {
-      // If we just came from a magic link, wait for Supabase to process tokens
       if (hasAuthParams()) {
         const timer = setTimeout(() => {
-          // Failsafe: stop waiting after 5s
           if (!cancelled) setLoading(false)
         }, 5000)
         const { data: sub } = supabase.auth.onAuthStateChange((_event, session) => {
           if (cancelled) return
           if (session) {
-            setIsAuthed(true)
-            setLoading(false)
             clearTimeout(timer)
+            finishAuth(session.user.id)
           }
         })
-        // Also check current session in case it's already set
         const { data } = await supabase.auth.getSession()
         if (!cancelled && data.session) {
-          setIsAuthed(true)
-          setLoading(false)
           clearTimeout(timer)
+          finishAuth(data.session.user.id)
         }
         return () => { sub.subscription.unsubscribe(); clearTimeout(timer); cancelled = true }
       } else {
         const { data } = await supabase.auth.getSession()
         if (!cancelled) {
-          setIsAuthed(!!data.session)
-          setLoading(false)
+          if (data.session) {
+            await finishAuth(data.session.user.id)
+          } else {
+            setLoading(false)
+          }
         }
       }
     }
@@ -53,5 +94,6 @@ export default function RequireAuth({ children }: { children: JSX.Element }) {
 
   if (loading) return <div style={{ padding: 24 }}>Loading...</div>
   if (!isAuthed) return <Navigate to="/login" state={{ from: loc }} replace />
+  if (subStatus !== 'ok') return <AccountInactive status={subStatus} />
   return children
 }

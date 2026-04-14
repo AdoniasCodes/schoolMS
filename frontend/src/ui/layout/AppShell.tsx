@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React, { useEffect, useState } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { useTheme } from '@/ui/theme/ThemeProvider'
 import { supabase } from '@/lib/supabaseClient'
@@ -28,6 +28,17 @@ export const AppShell: React.FC<{ children: React.ReactNode }> = ({ children }) 
   const { theme, toggle } = useTheme()
   const navigate = useNavigate()
   const [mobileOpen, setMobileOpen] = useState(false)
+  const [userRole, setUserRole] = useState<string | null>(null)
+
+  useEffect(() => {
+    const loadRole = async () => {
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) return
+      const { data } = await supabase.from('users').select('role_key').eq('id', user.id).maybeSingle()
+      setUserRole(data?.role_key ?? null)
+    }
+    loadRole()
+  }, [])
 
   const signOut = async () => {
     await supabase.auth.signOut()
@@ -36,7 +47,14 @@ export const AppShell: React.FC<{ children: React.ReactNode }> = ({ children }) 
 
   const closeMobile = () => setMobileOpen(false)
 
-  const navItems = (
+  const isSuperAdmin = userRole === 'super_admin'
+
+  const navItems = isSuperAdmin ? (
+    <>
+      <NavLink to="/app/super" label="Overview" onClick={closeMobile} />
+      <NavLink to="/app/settings" label="Settings" onClick={closeMobile} />
+    </>
+  ) : (
     <>
       <NavLink to="/app" label="Dashboard" onClick={closeMobile} />
       <NavLink to="/app/classes" label="Classes" onClick={closeMobile} />
@@ -59,6 +77,7 @@ export const AppShell: React.FC<{ children: React.ReactNode }> = ({ children }) 
       <aside className="sidebar sidebar-desktop">
         <div className="brand">
           <img src="/images/logo.webp" alt="Abogida logo" style={{ width: 120, height: 'auto', borderRadius: 12, display: 'block', aspectRatio: '500 / 178', maxHeight: 42.72 }} />
+          {isSuperAdmin && <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 4 }}>Platform Admin</div>}
         </div>
         <nav className="nav-vertical">{navItems}</nav>
       </aside>
