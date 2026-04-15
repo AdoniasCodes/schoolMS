@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { supabase, createNonPersistingClient } from '@/lib/supabaseClient'
 import { useToast } from '@/ui/components/toast/ToastProvider'
 import { LoadingSpinner } from '@/ui/components/LoadingSpinner'
-import { Building2, Users, GraduationCap, UserCheck } from 'lucide-react'
+import { Building2, Users, GraduationCap, UserCheck, X } from 'lucide-react'
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from 'recharts'
 import { useLanguage } from '@/i18n/LanguageProvider'
 
@@ -16,6 +16,12 @@ interface SchoolRow {
   trial_ends_at: string | null
   student_count: number
   teacher_count: number
+}
+
+interface SchoolAdmin {
+  id: string
+  full_name: string | null
+  email: string | null
 }
 
 export default function SuperAdminDashboard() {
@@ -37,13 +43,23 @@ export default function SuperAdminDashboard() {
   const [adminPassword, setAdminPassword] = useState('')
   const [saving, setSaving] = useState(false)
 
-  // Expanded school
-  const [expandedSchool, setExpandedSchool] = useState<string | null>(null)
-
-  // Status editing
-  const [editingId, setEditingId] = useState<string | null>(null)
+  // Edit modal
+  const [editSchool, setEditSchool] = useState<SchoolRow | null>(null)
+  const [editName, setEditName] = useState('')
+  const [editAddress, setEditAddress] = useState('')
+  const [editPhone, setEditPhone] = useState('')
   const [editStatus, setEditStatus] = useState('')
   const [editPlan, setEditPlan] = useState('')
+  const [editSaving, setEditSaving] = useState(false)
+
+  // Admin management in edit modal
+  const [schoolAdmin, setSchoolAdmin] = useState<SchoolAdmin | null>(null)
+  const [adminLoading, setAdminLoading] = useState(false)
+  const [newAdminName, setNewAdminName] = useState('')
+  const [newAdminEmail, setNewAdminEmail] = useState('')
+  const [newAdminPassword, setNewAdminPassword] = useState('')
+  const [resetPassword, setResetPassword] = useState('')
+  const [showCreateAdmin, setShowCreateAdmin] = useState(false)
 
   const loadData = async () => {
     setLoading(true)
@@ -97,6 +113,58 @@ export default function SuperAdminDashboard() {
 
   useEffect(() => { loadData() }, [])
 
+  // Load admin for a school
+  const loadSchoolAdmin = async (schoolId: string) => {
+    setAdminLoading(true)
+    setSchoolAdmin(null)
+
+    // Get school_admin user for this school
+    const { data: adminUser } = await supabase
+      .from('users')
+      .select('id, full_name')
+      .eq('school_id', schoolId)
+      .eq('role_key', 'school_admin')
+      .is('deleted_at', null)
+      .limit(1)
+      .maybeSingle()
+
+    if (adminUser) {
+      // Get email from auth.users via supabase admin or by listing
+      // Since we can't directly query auth.users from client, we use the user's id
+      // to get their email from the auth metadata we stored during signup
+      // We'll fetch it from the users RPC or just show what we have
+      const { data: authData } = await supabase.rpc('get_user_email', { user_id: adminUser.id }).maybeSingle() as { data: { email: string } | null }
+      setSchoolAdmin({
+        id: adminUser.id,
+        full_name: adminUser.full_name,
+        email: authData?.email ?? null,
+      })
+    }
+
+    setAdminLoading(false)
+  }
+
+  // Open edit modal
+  const openEditModal = async (school: SchoolRow) => {
+    setEditSchool(school)
+    setEditName(school.name)
+    setEditAddress(school.address ?? '')
+    setEditPhone(school.phone ?? '')
+    setEditStatus(school.subscription_status)
+    setEditPlan(school.subscription_plan)
+    setShowCreateAdmin(false)
+    setNewAdminName('')
+    setNewAdminEmail('')
+    setNewAdminPassword('')
+    setResetPassword('')
+    await loadSchoolAdmin(school.id)
+  }
+
+  const closeEditModal = () => {
+    setEditSchool(null)
+    setSchoolAdmin(null)
+  }
+
   const addSchool = async () => {
     if (!newName.trim() || !adminEmail.trim() || !adminPassword.trim() || !adminFullName.trim()) return
     if (adminPassword.length < 6) { show('Password must be at least 6 characters', 'error'); return }
@@ -133,10 +201,10 @@ export default function SuperAdminDashboard() {
     }
 
     // 3. Insert into public.users with school_admin role
+    // Note: email lives in auth.users, not public.users
     const { error: userErr } = await supabase.from('users').upsert({
       id: authData.user.id,
       full_name: adminFullName.trim(),
-      email: adminEmail.trim(),
       role_key: 'school_admin',
       school_id: schoolId,
     }, { onConflict: 'id' })
@@ -154,8 +222,15 @@ export default function SuperAdminDashboard() {
     setSaving(false)
   }
 
-  const saveSchoolStatus = async (schoolId: string) => {
+  // Save school edits (details + subscription)
+  const saveSchoolEdits = async () => {
+    if (!editSchool) return
+    setEditSaving(true)
+
     const updates: Record<string, unknown> = {
+      name: editName.trim(),
+      address: editAddress.trim() || null,
+      phone: editPhone.trim() || null,
       subscription_status: editStatus,
       subscription_plan: editPlan,
     }
@@ -165,13 +240,83 @@ export default function SuperAdminDashboard() {
       updates.suspended_at = null
     }
 
-    const { error } = await supabase.from('schools').update(updates).eq('id', schoolId)
-    if (error) { show(error.message, 'error') }
-    else {
+    const { error } = await supabase.from('schools').update(updates).eq('id', editSchool.id)
+    if (error) {
+      show(error.message, 'error')
+    } else {
       show('School updated', 'success')
-      setEditingId(null)
+      closeEditModal()
       await loadData()
     }
+    setEditSaving(false)
+  }
+
+  // Create a new admin for a school (replaces existing by reassigning school_id)
+  const createAdminForSchool = async () => {
+    if (!editSchool) return
+    if (!newAdminName.trim() || !newAdminEmail.trim() || !newAdminPassword.trim()) return
+    if (newAdminPassword.length < 6) { show('Password must be at least 6 characters', 'error'); return }
+    setEditSaving(true)
+
+    // If there's an existing admin, unlink them from this school
+    if (schoolAdmin) {
+      await supabase.from('users').update({ school_id: null }).eq('id', schoolAdmin.id)
+    }
+
+    // Create auth user
+    const tempClient = createNonPersistingClient()
+    const { data: authData, error: authErr } = await tempClient.auth.signUp({
+      email: newAdminEmail.trim(),
+      password: newAdminPassword,
+      options: { data: { full_name: newAdminName.trim() } },
+    })
+
+    if (authErr || !authData.user) {
+      show(`Failed to create admin: ${authErr?.message ?? 'Unknown error'}`, 'error')
+      setEditSaving(false)
+      return
+    }
+
+    // Insert into public.users
+    const { error: userErr } = await supabase.from('users').upsert({
+      id: authData.user.id,
+      full_name: newAdminName.trim(),
+      role_key: 'school_admin',
+      school_id: editSchool.id,
+    }, { onConflict: 'id' })
+
+    if (userErr) {
+      show(`Auth created but user record failed: ${userErr.message}`, 'error')
+    } else {
+      show(`Admin ${newAdminEmail.trim()} assigned to ${editSchool.name}`, 'success')
+    }
+
+    setShowCreateAdmin(false)
+    setNewAdminName('')
+    setNewAdminEmail('')
+    setNewAdminPassword('')
+    await loadSchoolAdmin(editSchool.id)
+    setEditSaving(false)
+  }
+
+  // Reset admin password via server-side RPC
+  const resetAdminPassword = async () => {
+    if (!schoolAdmin || !resetPassword.trim()) return
+    if (resetPassword.length < 6) { show('Password must be at least 6 characters', 'error'); return }
+    setEditSaving(true)
+
+    const { error } = await supabase.rpc('admin_reset_password', {
+      target_user_id: schoolAdmin.id,
+      new_password: resetPassword,
+    })
+
+    if (error) {
+      show(`Password reset failed: ${error.message}`, 'error')
+    } else {
+      show('Password reset successfully', 'success')
+      setResetPassword('')
+    }
+    setEditSaving(false)
   }
 
   const statusColor = (s: string) => {
@@ -327,87 +472,32 @@ export default function SuperAdminDashboard() {
             </thead>
             <tbody>
               {schools.map(s => (
-                <>
-                  <tr key={s.id} style={{ borderBottom: '1px solid var(--border)' }}>
-                    <td style={{ padding: '10px 12px' }}>
-                      <div style={{ fontWeight: 500 }}>{s.name}</div>
-                      {s.address && <div className="helper" style={{ fontSize: 11 }}>{s.address}</div>}
-                    </td>
-                    <td style={{ padding: '10px 12px' }}>
-                      {editingId === s.id ? (
-                        <select value={editStatus} onChange={e => setEditStatus(e.target.value)} style={{ fontSize: 13, padding: '2px 6px' }}>
-                          <option value="trial">{t('super.trial')}</option>
-                          <option value="active">{t('super.active')}</option>
-                          <option value="suspended">{t('super.suspended')}</option>
-                          <option value="cancelled">{t('super.cancelled')}</option>
-                        </select>
-                      ) : (
-                        <span className={`badge ${statusColor(s.subscription_status)}`}>{s.subscription_status}</span>
-                      )}
-                    </td>
-                    <td style={{ padding: '10px 12px' }}>
-                      {editingId === s.id ? (
-                        <select value={editPlan} onChange={e => setEditPlan(e.target.value)} style={{ fontSize: 13, padding: '2px 6px' }}>
-                          <option value="basic">{t('super.basic')}</option>
-                          <option value="standard">{t('super.standard')}</option>
-                          <option value="premium">{t('super.premium')}</option>
-                        </select>
-                      ) : (
-                        <span style={{ fontSize: 13, textTransform: 'capitalize' }}>{s.subscription_plan}</span>
-                      )}
-                    </td>
-                    <td style={{ padding: '10px 12px', textAlign: 'center' }}>{s.student_count}</td>
-                    <td style={{ padding: '10px 12px', textAlign: 'center' }}>{s.teacher_count}</td>
-                    <td style={{ padding: '10px 12px', fontSize: 13 }}>
-                      {s.trial_ends_at ? new Date(s.trial_ends_at).toLocaleDateString() : '-'}
-                    </td>
-                    <td style={{ padding: '10px 12px', textAlign: 'right' }}>
-                      {editingId === s.id ? (
-                        <div style={{ display: 'flex', gap: 4, justifyContent: 'flex-end' }}>
-                          <button className="btn btn-primary" style={{ padding: '4px 10px', fontSize: 12 }} onClick={() => saveSchoolStatus(s.id)}>{t('common.save')}</button>
-                          <button className="btn btn-ghost" style={{ padding: '4px 10px', fontSize: 12 }} onClick={() => setEditingId(null)}>{t('common.cancel')}</button>
-                        </div>
-                      ) : (
-                        <div style={{ display: 'flex', gap: 4, justifyContent: 'flex-end' }}>
-                          <button
-                            className="btn btn-secondary"
-                            style={{ padding: '4px 10px', fontSize: 12 }}
-                            onClick={() => { setEditingId(s.id); setEditStatus(s.subscription_status); setEditPlan(s.subscription_plan) }}
-                          >
-                            {t('common.edit')}
-                          </button>
-                          <button
-                            className="btn btn-ghost"
-                            style={{ padding: '4px 10px', fontSize: 12 }}
-                            onClick={() => setExpandedSchool(expandedSchool === s.id ? null : s.id)}
-                          >
-                            {expandedSchool === s.id ? t('super.collapse') : t('common.details')}
-                          </button>
-                        </div>
-                      )}
-                    </td>
-                  </tr>
-                  {expandedSchool === s.id && (
-                    <tr key={`${s.id}-detail`}>
-                      <td colSpan={7} style={{ padding: '12px 24px', background: 'var(--bg)' }}>
-                        <div className="grid cols-3" style={{ gap: 12 }}>
-                          <div>
-                            <div className="helper">{t('super.phone')}</div>
-                            <div>{s.phone || t('super.notSet')}</div>
-                          </div>
-                          <div>
-                            <div className="helper">{t('super.students')}</div>
-                            <div>{s.student_count}</div>
-                          </div>
-                          <div>
-                            <div className="helper">{t('super.teachers')}</div>
-                            <div>{s.teacher_count}</div>
-                          </div>
-                        </div>
-                      </td>
-                    </tr>
-                  )}
-                </>
+                <tr key={s.id} style={{ borderBottom: '1px solid var(--border)' }}>
+                  <td style={{ padding: '10px 12px' }}>
+                    <div style={{ fontWeight: 500 }}>{s.name}</div>
+                    {s.address && <div className="helper" style={{ fontSize: 11 }}>{s.address}</div>}
+                  </td>
+                  <td style={{ padding: '10px 12px' }}>
+                    <span className={`badge ${statusColor(s.subscription_status)}`}>{s.subscription_status}</span>
+                  </td>
+                  <td style={{ padding: '10px 12px' }}>
+                    <span style={{ fontSize: 13, textTransform: 'capitalize' }}>{s.subscription_plan}</span>
+                  </td>
+                  <td style={{ padding: '10px 12px', textAlign: 'center' }}>{s.student_count}</td>
+                  <td style={{ padding: '10px 12px', textAlign: 'center' }}>{s.teacher_count}</td>
+                  <td style={{ padding: '10px 12px', fontSize: 13 }}>
+                    {s.trial_ends_at ? new Date(s.trial_ends_at).toLocaleDateString() : '-'}
+                  </td>
+                  <td style={{ padding: '10px 12px', textAlign: 'right' }}>
+                    <button
+                      className="btn btn-secondary"
+                      style={{ padding: '4px 10px', fontSize: 12 }}
+                      onClick={() => openEditModal(s)}
+                    >
+                      {t('common.edit')}
+                    </button>
+                  </td>
+                </tr>
               ))}
             </tbody>
           </table>
@@ -417,6 +507,172 @@ export default function SuperAdminDashboard() {
           <div className="empty" style={{ padding: 24 }}>{t('super.noSchools')}</div>
         )}
       </div>
+
+      {/* Edit School Modal */}
+      {editSchool && (
+        <div className="modal-overlay" onClick={closeEditModal}>
+          <div className="modal-panel wide" onClick={e => e.stopPropagation()} style={{ background: 'var(--card)', borderRadius: 12, padding: 24 }}>
+            {/* Header */}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
+              <h3 style={{ margin: 0 }}>Edit School: {editSchool.name}</h3>
+              <button className="btn btn-ghost" onClick={closeEditModal} style={{ padding: 4 }}><X size={20} /></button>
+            </div>
+
+            {/* School Details Section */}
+            <div style={{ marginBottom: 20 }}>
+              <div style={{ fontWeight: 600, fontSize: 14, marginBottom: 10, color: 'var(--muted)' }}>School Details</div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 12 }}>
+                <div>
+                  <label className="helper">{t('super.schoolName')}</label>
+                  <input value={editName} onChange={e => setEditName(e.target.value)} />
+                </div>
+                <div>
+                  <label className="helper">{t('super.address')}</label>
+                  <input value={editAddress} onChange={e => setEditAddress(e.target.value)} />
+                </div>
+                <div>
+                  <label className="helper">{t('super.phone')}</label>
+                  <input value={editPhone} onChange={e => setEditPhone(e.target.value)} />
+                </div>
+              </div>
+            </div>
+
+            {/* Subscription Section */}
+            <div style={{ marginBottom: 20 }}>
+              <div style={{ fontWeight: 600, fontSize: 14, marginBottom: 10, color: 'var(--muted)' }}>Subscription</div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                <div>
+                  <label className="helper">{t('common.status')}</label>
+                  <select value={editStatus} onChange={e => setEditStatus(e.target.value)}>
+                    <option value="trial">{t('super.trial')}</option>
+                    <option value="active">{t('super.active')}</option>
+                    <option value="suspended">{t('super.suspended')}</option>
+                    <option value="cancelled">{t('super.cancelled')}</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="helper">{t('super.plan')}</label>
+                  <select value={editPlan} onChange={e => setEditPlan(e.target.value)}>
+                    <option value="basic">{t('super.basic')}</option>
+                    <option value="standard">{t('super.standard')}</option>
+                    <option value="premium">{t('super.premium')}</option>
+                  </select>
+                </div>
+              </div>
+            </div>
+
+            {/* Save school details button */}
+            <div style={{ marginBottom: 24 }}>
+              <button
+                className="btn btn-primary"
+                onClick={saveSchoolEdits}
+                disabled={editSaving || !editName.trim()}
+              >
+                {editSaving ? <><LoadingSpinner size="sm" /> Saving...</> : 'Save School Details'}
+              </button>
+            </div>
+
+            <hr style={{ border: 'none', borderTop: '1px solid var(--border)', margin: '0 0 20px' }} />
+
+            {/* Admin Section */}
+            <div>
+              <div style={{ fontWeight: 600, fontSize: 14, marginBottom: 10, color: 'var(--muted)' }}>School Admin</div>
+
+              {adminLoading ? (
+                <div style={{ padding: 12 }}><LoadingSpinner size="sm" /> Loading admin info...</div>
+              ) : schoolAdmin ? (
+                <div style={{ background: 'var(--bg)', borderRadius: 8, padding: 16, marginBottom: 12 }}>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 16 }}>
+                    <div>
+                      <div className="helper">Name</div>
+                      <div style={{ fontWeight: 500 }}>{schoolAdmin.full_name || 'Not set'}</div>
+                    </div>
+                    <div>
+                      <div className="helper">Email</div>
+                      <div style={{ fontWeight: 500 }}>{schoolAdmin.email || 'Unable to retrieve'}</div>
+                    </div>
+                  </div>
+
+                  {/* Password Reset */}
+                  <div style={{ display: 'flex', gap: 8, alignItems: 'flex-end' }}>
+                    <div style={{ flex: 1 }}>
+                      <label className="helper">Reset Password</label>
+                      <input
+                        type="password"
+                        value={resetPassword}
+                        onChange={e => setResetPassword(e.target.value)}
+                        placeholder="New password (min 6 chars)"
+                      />
+                    </div>
+                    <button
+                      className="btn btn-secondary"
+                      onClick={resetAdminPassword}
+                      disabled={editSaving || !resetPassword.trim() || resetPassword.length < 6}
+                      style={{ whiteSpace: 'nowrap' }}
+                    >
+                      Reset Password
+                    </button>
+                  </div>
+
+                  {/* Replace admin option */}
+                  <div style={{ marginTop: 12 }}>
+                    <button
+                      className="btn btn-ghost"
+                      style={{ fontSize: 12, color: 'var(--muted)' }}
+                      onClick={() => setShowCreateAdmin(!showCreateAdmin)}
+                    >
+                      {showCreateAdmin ? 'Cancel' : 'Replace with new admin'}
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <div style={{ background: 'var(--bg)', borderRadius: 8, padding: 16, marginBottom: 12 }}>
+                  <div style={{ color: 'var(--muted)', fontSize: 13, marginBottom: 8 }}>
+                    No admin assigned to this school.
+                  </div>
+                  <button
+                    className="btn btn-primary"
+                    style={{ fontSize: 12 }}
+                    onClick={() => setShowCreateAdmin(true)}
+                  >
+                    Create Admin
+                  </button>
+                </div>
+              )}
+
+              {/* Create new admin form */}
+              {showCreateAdmin && (
+                <div style={{ background: 'var(--bg)', borderRadius: 8, padding: 16 }}>
+                  <div style={{ fontWeight: 500, fontSize: 13, marginBottom: 10 }}>
+                    {schoolAdmin ? 'Create New Admin (replaces current)' : 'Create Admin Account'}
+                  </div>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 12, marginBottom: 12 }}>
+                    <div>
+                      <label className="helper">Full Name *</label>
+                      <input value={newAdminName} onChange={e => setNewAdminName(e.target.value)} placeholder="Admin full name" />
+                    </div>
+                    <div>
+                      <label className="helper">Email *</label>
+                      <input type="email" value={newAdminEmail} onChange={e => setNewAdminEmail(e.target.value)} placeholder="admin@school.com" />
+                    </div>
+                    <div>
+                      <label className="helper">Temporary Password *</label>
+                      <input type="password" value={newAdminPassword} onChange={e => setNewAdminPassword(e.target.value)} placeholder="Min 6 characters" />
+                    </div>
+                  </div>
+                  <button
+                    className="btn btn-primary"
+                    onClick={createAdminForSchool}
+                    disabled={editSaving || !newAdminName.trim() || !newAdminEmail.trim() || !newAdminPassword.trim() || newAdminPassword.length < 6}
+                  >
+                    {editSaving ? <><LoadingSpinner size="sm" /> Creating...</> : 'Create & Assign Admin'}
+                  </button>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
