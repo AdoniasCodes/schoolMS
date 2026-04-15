@@ -440,7 +440,36 @@ Notes:
 - Super admin role promoted for founder account
 - Vercel free plan: only one collaborator can push to GitHub — Claude must never git push, only provide commands
 
-## Current State Summary (as of Step 28)
+### 2026-04-14 Step 29 — Pending Features Completion
+- **Media Upload on Reports**: FileUpload integrated in Reports.tsx with progress_report_id FK, media displayed on report cards
+- **Message Attachments Display**: Thread view now renders inline images/PDF links for message attachments
+- **ParentDashboard Media**: Announcements and progress reports now load and display attached media with signed URLs
+- **Language Toggle (EN/AM i18n)**: Full bilingual support — LanguageProvider context, ~300 translation keys, all 17+ pages translated. Toggle in landing header, app topbar, and Settings.
+- **Search Page**: Role-based search — Teacher: students, Admin: students/teachers, Super Admin: schools/admins/teachers/parents/students
+- **RLS Verification**: All policies verified across 4 roles, documented acceptable MVP gap in media_assets
+
+### 2026-04-14 Step 30 — Grading System & Report Cards
+**New tables (migration 0015)**:
+- `subjects`: school-level subject definitions with name, name_am, grade_levels[], is_default
+- `class_subject_teachers`: which teacher teaches which subject in which class (UNIQUE class_id,subject_id)
+- `assessment_types`: exam types per term with weights (Quiz, Midterm, Final)
+- `grades`: individual scores (0-100) per student/subject/assessment/term
+- `grade_exemptions`: reasons for missing grades (Disqualification, Health, Transfer, etc.)
+
+**Seed function**: `seed_default_subjects(school_id)` — 13 Ethiopian curriculum subjects (KG-8) with Amharic names
+
+**New pages**:
+- `Grades.tsx`: Teacher enters scores per class/subject/assessment. Supports exemptions with reason dropdown. Bulk entry with upsert.
+- `ReportCards.tsx`: Admin generates report cards — select term/scope (student/class/school). Check Readiness warns about missing grades. Generates weighted averages, class ranking, printable layout with @media print CSS.
+
+**Modified pages**:
+- `Settings.tsx`: Admin-only Subjects Management (CRUD + Load Ethiopian Curriculum) and Assessment Types Management (CRUD with weight validation per term)
+- `Classes.tsx`: Subject-Teacher Assignment panel — assign teachers to subjects within each class
+- `AppShell.tsx`: Conditional nav items — Grades (teacher+admin), Report Cards (admin only)
+
+**RLS**: All 5 tables with school_id scoping. grades INSERT enforced via class_subject_teachers check (teacher must be assigned to that subject in that class).
+
+## Current State Summary (as of Step 30)
 
 ### Roles & Routing
 | Role | Dashboard Route | Nav Items |
@@ -450,8 +479,8 @@ Notes:
 | teacher | /app/teacher | All school features |
 | parent | /app/parent | All school features |
 
-### Database Tables (15 + 1 junction)
-roles, users, schools, teachers, parents, students, parent_students, classes, enrollments, attendance, daily_updates, messages, progress_reports, announcements, media_assets, announcement_recipients
+### Database Tables (20 + 2 junction)
+roles, users, schools, teachers, parents, students, parent_students, classes, enrollments, attendance, daily_updates, messages, progress_reports, announcements, media_assets, announcement_recipients, subjects, class_subject_teachers, assessment_types, grades, grade_exemptions
 
 ### Key Schema Details
 - `schools`: has subscription_status (trial/active/suspended/cancelled), subscription_plan, trial_ends_at, max_students, max_teachers
@@ -461,8 +490,8 @@ roles, users, schools, teachers, parents, students, parent_students, classes, en
 - Storage bucket: `media` (private, 50MB, image/*/video/*/application/pdf)
 
 ### Frontend Components
-**Pages (17)**: Landing, Login, AccountInactive, Dashboard, AdminDashboard, TeacherDashboard, ParentDashboard, SuperAdminDashboard, Classes, Students, Attendance, Updates, Announcements, Messages, Reports, BulkImport, Settings
-**Reusable**: Modal, QuickEnrollWizard, FileUpload, ParentMultiSelect, LoadingSpinner, ToastProvider, ThemeProvider, AppShell
+**Pages (20)**: Landing, Login, AccountInactive, Dashboard, AdminDashboard, TeacherDashboard, ParentDashboard, SuperAdminDashboard, Classes, Students, Attendance, Updates, Announcements, Messages, Reports, BulkImport, Search, Grades, ReportCards, Settings
+**Reusable**: Modal, QuickEnrollWizard, FileUpload, ParentMultiSelect, LoadingSpinner, ToastProvider, ThemeProvider, LanguageProvider, AppShell
 
 ### Tech Stack
 - Frontend: React 18 + TypeScript + Vite 5

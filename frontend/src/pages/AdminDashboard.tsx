@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { supabase } from '@/lib/supabaseClient'
+import { useLanguage } from '@/i18n/LanguageProvider'
 import { QuickEnrollWizard } from '@/ui/components/QuickEnrollWizard'
 import { Users, BookOpen, GraduationCap, ClipboardCheck, UserPlus, Upload, Megaphone, Settings } from 'lucide-react'
 import { PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, AreaChart, Area } from 'recharts'
@@ -11,6 +12,7 @@ interface RecentUpdate { id: string; text_content: string; created_at: string; c
 interface StudentOption { id: string; first_name: string; last_name: string }
 
 export default function AdminDashboard() {
+  const { t } = useLanguage()
   const [stats, setStats] = useState({ students: 0, classes: 0, teachers: 0, parents: 0, attendanceRate: null as number | null })
   const [teachers, setTeachers] = useState<TeacherRow[]>([])
   const [parents, setParents] = useState<ParentRow[]>([])
@@ -155,17 +157,17 @@ export default function AdminDashboard() {
   return (
     <div style={{ display: 'grid', gap: 16 }}>
       <div className="dash-header">
-        <h2>Admin Dashboard</h2>
-        <p>Overview of your school's performance and activity</p>
+        <h2>{t('admin.title')}</h2>
+        <p>{t('admin.subtitle')}</p>
       </div>
 
       {/* Stats */}
       <div className="stat-grid cols-4">
         {[
-          { label: 'Students', value: stats.students, color: '#3b82f6', icon: <Users size={24} /> },
-          { label: 'Classes', value: stats.classes, color: '#8b5cf6', icon: <BookOpen size={24} /> },
-          { label: 'Teachers', value: stats.teachers, color: '#22c55e', icon: <GraduationCap size={24} /> },
-          { label: 'Attendance', value: stats.attendanceRate != null ? `${stats.attendanceRate}%` : '\u2014', color: '#f59e0b', icon: <ClipboardCheck size={24} /> },
+          { label: t('admin.students'), value: stats.students, color: '#3b82f6', icon: <Users size={24} /> },
+          { label: t('admin.classes'), value: stats.classes, color: '#8b5cf6', icon: <BookOpen size={24} /> },
+          { label: t('admin.teachers'), value: stats.teachers, color: '#22c55e', icon: <GraduationCap size={24} /> },
+          { label: t('admin.attendance'), value: stats.attendanceRate != null ? `${stats.attendanceRate}%` : '\u2014', color: '#f59e0b', icon: <ClipboardCheck size={24} /> },
         ].map((s, i) => (
           <div key={i} className="stat-card">
             <div className="stat-card-accent" style={{ background: s.color }} />
@@ -179,7 +181,7 @@ export default function AdminDashboard() {
       {/* Charts row */}
       <div className="grid cols-2" style={{ gap: 12 }}>
         <div className="chart-card">
-          <h3>Attendance This Week</h3>
+          <h3>{t('admin.attendanceWeek')}</h3>
           {attendanceByDay.some(d => d.present + d.absent > 0) ? (
             <ResponsiveContainer width="100%" height={220}>
               <AreaChart data={attendanceByDay}>
@@ -192,17 +194,17 @@ export default function AdminDashboard() {
                 <XAxis dataKey="day" tick={{ fontSize: 12 }} axisLine={false} tickLine={false} />
                 <YAxis tick={{ fontSize: 12 }} axisLine={false} tickLine={false} />
                 <Tooltip contentStyle={{ borderRadius: 10, border: '1px solid #e2e8f0', fontSize: 13 }} />
-                <Area type="monotone" dataKey="present" stroke="#22c55e" fill="url(#gradPresent)" strokeWidth={2} name="Present" />
-                <Area type="monotone" dataKey="absent" stroke="#ef4444" fill="rgba(239,68,68,0.08)" strokeWidth={2} name="Absent" />
+                <Area type="monotone" dataKey="present" stroke="#22c55e" fill="url(#gradPresent)" strokeWidth={2} name={t('admin.present')} />
+                <Area type="monotone" dataKey="absent" stroke="#ef4444" fill="rgba(239,68,68,0.08)" strokeWidth={2} name={t('admin.absent')} />
               </AreaChart>
             </ResponsiveContainer>
           ) : (
-            <div className="empty" style={{ padding: 40 }}>No attendance data this week</div>
+            <div className="empty" style={{ padding: 40 }}>{t('admin.noAttendance')}</div>
           )}
         </div>
 
         <div className="chart-card">
-          <h3>Students per Class</h3>
+          <h3>{t('admin.studentsPerClass')}</h3>
           {classSizes.length > 0 ? (
             <ResponsiveContainer width="100%" height={220}>
               <BarChart data={classSizes}>
@@ -213,7 +215,7 @@ export default function AdminDashboard() {
               </BarChart>
             </ResponsiveContainer>
           ) : (
-            <div className="empty" style={{ padding: 40 }}>No class data</div>
+            <div className="empty" style={{ padding: 40 }}>{t('admin.noClassData')}</div>
           )}
         </div>
       </div>
@@ -222,19 +224,19 @@ export default function AdminDashboard() {
       <div className="grid cols-4 quick-actions">
         <div className="quick-action" style={{ cursor: 'pointer' }} onClick={() => setShowWizard(true)}>
           <div className="quick-action-icon" style={{ background: '#3b82f6' }}><UserPlus size={20} /></div>
-          <div><h4>Quick Enroll</h4><p>Add student in one step</p></div>
+          <div><h4>{t('admin.quickEnroll')}</h4><p>{t('admin.quickEnrollDesc')}</p></div>
         </div>
         <Link to="/app/import" className="quick-action">
           <div className="quick-action-icon" style={{ background: '#8b5cf6' }}><Upload size={20} /></div>
-          <div><h4>Bulk Import</h4><p>Upload Excel/CSV</p></div>
+          <div><h4>{t('admin.bulkImport')}</h4><p>{t('admin.bulkImportDesc')}</p></div>
         </Link>
         <Link to="/app/announcements" className="quick-action">
           <div className="quick-action-icon" style={{ background: '#f59e0b' }}><Megaphone size={20} /></div>
-          <div><h4>Announce</h4><p>Post announcement</p></div>
+          <div><h4>{t('admin.announce')}</h4><p>{t('admin.announceDesc')}</p></div>
         </Link>
         <Link to="/app/classes" className="quick-action">
           <div className="quick-action-icon" style={{ background: '#22c55e' }}><Settings size={20} /></div>
-          <div><h4>Classes</h4><p>Manage classes</p></div>
+          <div><h4>{t('admin.classes')}</h4><p>{t('admin.manageClasses')}</p></div>
         </Link>
       </div>
 
@@ -243,25 +245,25 @@ export default function AdminDashboard() {
       {/* Teachers & Parents */}
       <div className="grid cols-2" style={{ gap: 12 }}>
         <div className="chart-card">
-          <h3>Teachers ({teachers.length})</h3>
-          {teachers.length === 0 ? <div className="empty">No teachers</div> : (
-            <table><thead><tr><th>Name</th><th>Classes</th></tr></thead>
+          <h3>{t('admin.teachers')} ({teachers.length})</h3>
+          {teachers.length === 0 ? <div className="empty">{t('admin.noTeachers')}</div> : (
+            <table><thead><tr><th>{t('common.name')}</th><th>{t('admin.classes')}</th></tr></thead>
             <tbody>{teachers.map(t => (
               <tr key={t.id}><td style={{ fontWeight: 600 }}>{t.full_name}</td><td><span className="badge">{t.class_count}</span></td></tr>
             ))}</tbody></table>
           )}
         </div>
         <div className="chart-card">
-          <h3>Parents ({parents.length})</h3>
-          {parents.length === 0 ? <div className="empty">No parents</div> : (
-            <table><thead><tr><th>Name</th><th>Children</th><th style={{ width: 80 }}></th></tr></thead>
+          <h3>{t('admin.parents')} ({parents.length})</h3>
+          {parents.length === 0 ? <div className="empty">{t('admin.noParents')}</div> : (
+            <table><thead><tr><th>{t('common.name')}</th><th>{t('admin.children')}</th><th style={{ width: 80 }}></th></tr></thead>
             <tbody>{parents.map(p => (
               <tr key={p.id} style={{ cursor: 'pointer' }} onClick={() => { setExpandedParent(expandedParent === p.id ? null : p.id); setLinkStudentId('') }}>
                 <td style={{ fontWeight: 600 }}>{p.full_name}</td>
-                <td>{p.children.length === 0 ? <span className="helper">None</span> : p.children.map(c => (
+                <td>{p.children.length === 0 ? <span className="helper">{t('admin.none')}</span> : p.children.map(c => (
                   <span key={c.student_id} className="badge" style={{ marginRight: 4 }}>{c.name}</span>
                 ))}</td>
-                <td><button className="btn btn-ghost" style={{ padding: '2px 6px', fontSize: 11 }}>{expandedParent === p.id ? 'Close' : 'Link'}</button></td>
+                <td><button className="btn btn-ghost" style={{ padding: '2px 6px', fontSize: 11 }}>{expandedParent === p.id ? t('common.close') : t('admin.link')}</button></td>
               </tr>
             ))}</tbody></table>
           )}
@@ -272,7 +274,7 @@ export default function AdminDashboard() {
             const available = allStudents.filter(s => !linkedIds.has(s.id))
             return (
               <div style={{ marginTop: 12, padding: 14, background: 'var(--bg)', borderRadius: 10 }}>
-                <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 8 }}>Link Students — {parent.full_name}</div>
+                <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 8 }}>{t('admin.linkStudents')} — {parent.full_name}</div>
                 {parent.children.length > 0 && (
                   <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 10 }}>
                     {parent.children.map(c => (
@@ -286,15 +288,15 @@ export default function AdminDashboard() {
                 {available.length > 0 ? (
                   <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
                     <select value={linkStudentId} onChange={e => setLinkStudentId(e.target.value)} style={{ maxWidth: 180, padding: '6px 8px', fontSize: 13 }}>
-                      <option value="">Student...</option>
+                      <option value="">{t('admin.selectStudent')}</option>
                       {available.map(s => <option key={s.id} value={s.id}>{s.first_name} {s.last_name}</option>)}
                     </select>
                     <select value={linkRelation} onChange={e => setLinkRelation(e.target.value)} style={{ maxWidth: 120, padding: '6px 8px', fontSize: 13 }}>
-                      <option value="mother">Mother</option><option value="father">Father</option><option value="guardian">Guardian</option>
+                      <option value="mother">{t('admin.mother')}</option><option value="father">{t('admin.father')}</option><option value="guardian">{t('admin.guardian')}</option>
                     </select>
-                    <button className="btn btn-primary" style={{ padding: '6px 12px', fontSize: 12 }} onClick={handleLink} disabled={!linkStudentId || linkSaving}>Link</button>
+                    <button className="btn btn-primary" style={{ padding: '6px 12px', fontSize: 12 }} onClick={handleLink} disabled={!linkStudentId || linkSaving}>{t('admin.link')}</button>
                   </div>
-                ) : <p className="helper" style={{ margin: 0 }}>All students linked.</p>}
+                ) : <p className="helper" style={{ margin: 0 }}>{t('admin.allLinked')}</p>}
               </div>
             )
           })()}
@@ -303,8 +305,8 @@ export default function AdminDashboard() {
 
       {/* Recent Activity */}
       <div className="chart-card">
-        <h3>Recent Updates</h3>
-        {recentUpdates.length === 0 ? <div className="empty">No recent activity</div> : (
+        <h3>{t('admin.recentUpdates')}</h3>
+        {recentUpdates.length === 0 ? <div className="empty">{t('admin.noRecentActivity')}</div> : (
           <div style={{ display: 'grid', gap: 8 }}>
             {recentUpdates.map(u => (
               <div key={u.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 0', borderBottom: '1px solid var(--border)' }}>

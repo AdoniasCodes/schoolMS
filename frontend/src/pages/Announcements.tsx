@@ -4,6 +4,7 @@ import { useToast } from '@/ui/components/toast/ToastProvider'
 import { LoadingSpinner } from '@/ui/components/LoadingSpinner'
 import { FileUpload } from '@/ui/components/FileUpload'
 import { ParentMultiSelect } from '@/ui/components/ParentMultiSelect'
+import { useLanguage } from '@/i18n/LanguageProvider'
 
 interface ClassOption { id: string; name: string }
 interface Announcement {
@@ -25,6 +26,7 @@ type AudienceType = 'school' | 'class' | 'targeted'
 const PAGE_SIZE = 10
 
 export default function Announcements() {
+  const { t } = useLanguage()
   const { show } = useToast()
   const [role, setRole] = useState<Role | null>(null)
   const [userId, setUserId] = useState<string | null>(null)
@@ -199,35 +201,35 @@ export default function Announcements() {
     <div className="grid" style={{ gap: 16 }}>
       <div className="card">
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-          <h2 style={{ margin: 0 }}>Announcements</h2>
+          <h2 style={{ margin: 0 }}>{t('announcements.title')}</h2>
           {canPost && !showCreate && (
-            <button className="btn btn-primary" onClick={() => setShowCreate(true)}>+ New Announcement</button>
+            <button className="btn btn-primary" onClick={() => setShowCreate(true)}>{t('announcements.new')}</button>
           )}
         </div>
 
         {/* Create form */}
         {showCreate && canPost && (
           <div className="card" style={{ marginBottom: 16, background: 'var(--bg)' }}>
-            <h4 style={{ margin: '0 0 12px 0' }}>Post Announcement</h4>
+            <h4 style={{ margin: '0 0 12px 0' }}>{t('announcements.post')}</h4>
             <div style={{ display: 'grid', gap: 12 }}>
               <div>
-                <label className="helper">Title *</label>
-                <input value={formTitle} onChange={e => setFormTitle(e.target.value)} placeholder="Announcement title" />
+                <label className="helper">{t('announcements.titleLabel')}</label>
+                <input value={formTitle} onChange={e => setFormTitle(e.target.value)} placeholder={t('announcements.titlePlaceholder')} />
               </div>
               <div>
-                <label className="helper">Body</label>
-                <textarea value={formBody} onChange={e => setFormBody(e.target.value)} rows={3} placeholder="Details (optional)" />
+                <label className="helper">{t('announcements.body')}</label>
+                <textarea value={formBody} onChange={e => setFormBody(e.target.value)} rows={3} placeholder={t('announcements.bodyPlaceholder')} />
               </div>
               <div>
-                <label className="helper">Audience</label>
+                <label className="helper">{t('announcements.audience')}</label>
                 <div className="tab-bar" style={{ marginBottom: 8 }}>
-                  <button className={`tab-btn${audienceType === 'school' ? ' active' : ''}`} onClick={() => setAudienceType('school')}>All School</button>
-                  <button className={`tab-btn${audienceType === 'class' ? ' active' : ''}`} onClick={() => setAudienceType('class')}>By Class</button>
-                  <button className={`tab-btn${audienceType === 'targeted' ? ' active' : ''}`} onClick={() => setAudienceType('targeted')}>Specific Parents</button>
+                  <button className={`tab-btn${audienceType === 'school' ? ' active' : ''}`} onClick={() => setAudienceType('school')}>{t('announcements.allSchool')}</button>
+                  <button className={`tab-btn${audienceType === 'class' ? ' active' : ''}`} onClick={() => setAudienceType('class')}>{t('announcements.byClass')}</button>
+                  <button className={`tab-btn${audienceType === 'targeted' ? ' active' : ''}`} onClick={() => setAudienceType('targeted')}>{t('announcements.specificParents')}</button>
                 </div>
                 {audienceType === 'class' && (
                   <select value={formClass} onChange={e => setFormClass(e.target.value)}>
-                    <option value="">Select class...</option>
+                    <option value="">{t('announcements.selectClass')}</option>
                     {classes.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
                   </select>
                 )}
@@ -242,9 +244,9 @@ export default function Announcements() {
             </div>
             <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
               <button className="btn btn-primary" onClick={handleCreate} disabled={saving || !formTitle.trim()}>
-                {saving ? <><LoadingSpinner size="sm" /> Posting...</> : 'Post'}
+                {saving ? <><LoadingSpinner size="sm" /> {t('common.posting')}</> : t('announcements.postBtn')}
               </button>
-              <button className="btn btn-secondary" onClick={() => { setShowCreate(false); setAudienceType('school'); setTargetedParents([]) }}>Cancel</button>
+              <button className="btn btn-secondary" onClick={() => { setShowCreate(false); setAudienceType('school'); setTargetedParents([]) }}>{t('common.cancel')}</button>
             </div>
           </div>
         )}
@@ -252,7 +254,7 @@ export default function Announcements() {
         {/* Attach media to last announcement */}
         {lastAnnouncementId && schoolId && userId && (
           <div className="card" style={{ marginBottom: 16, background: 'var(--bg)', padding: 12 }}>
-            <label style={{ fontSize: 13, color: 'var(--muted)', marginBottom: 6, display: 'block' }}>Attach image/file to your announcement:</label>
+            <label style={{ fontSize: 13, color: 'var(--muted)', marginBottom: 6, display: 'block' }}>{t('announcements.attach')}</label>
             <FileUpload
               schoolId={schoolId}
               uploadedBy={userId}
@@ -263,13 +265,13 @@ export default function Announcements() {
               onError={(msg) => show(msg, 'error')}
               compact
             />
-            <button className="btn btn-ghost" style={{ marginTop: 6, fontSize: 12 }} onClick={() => setLastAnnouncementId(null)}>Skip</button>
+            <button className="btn btn-ghost" style={{ marginTop: 6, fontSize: 12 }} onClick={() => setLastAnnouncementId(null)}>{t('announcements.skip')}</button>
           </div>
         )}
 
         {/* Feed */}
         {announcements.length === 0 ? (
-          <div className="empty">No announcements yet.</div>
+          <div className="empty">{t('announcements.noAnnouncements')}</div>
         ) : (
           <div style={{ display: 'grid', gap: 12 }}>
             {announcements.map(a => (
@@ -282,7 +284,7 @@ export default function Announcements() {
                         <span className="badge badge-warning">{a.targeted_count} parent{a.targeted_count !== 1 ? 's' : ''}</span>
                       ) : (
                         <span className={a.class_name ? 'badge badge-info' : 'badge badge-success'}>
-                          {a.class_name ?? 'School-wide'}
+                          {a.class_name ?? t('announcements.schoolWide')}
                         </span>
                       )}
                       {a.author_name && <span className="helper">by {a.author_name}</span>}
@@ -290,7 +292,7 @@ export default function Announcements() {
                     </div>
                   </div>
                   {(a.created_by === userId || role === 'school_admin') && (
-                    <button className="btn btn-ghost" style={{ padding: '4px 8px', fontSize: 13, color: '#dc2626' }} onClick={() => handleDelete(a.id)}>Delete</button>
+                    <button className="btn btn-ghost" style={{ padding: '4px 8px', fontSize: 13, color: '#dc2626' }} onClick={() => handleDelete(a.id)}>{t('common.delete')}</button>
                   )}
                 </div>
                 {a.body && <p style={{ margin: '8px 0 0 0', color: 'var(--text)' }}>{a.body}</p>}
@@ -323,8 +325,8 @@ export default function Announcements() {
         {/* Pagination */}
         {(page > 0 || hasMore) && (
           <div style={{ display: 'flex', justifyContent: 'center', gap: 12, marginTop: 16 }}>
-            {page > 0 && <button className="btn btn-secondary" onClick={() => changePage(page - 1)}>Previous</button>}
-            {hasMore && <button className="btn btn-secondary" onClick={() => changePage(page + 1)}>Next</button>}
+            {page > 0 && <button className="btn btn-secondary" onClick={() => changePage(page - 1)}>{t('announcements.prev')}</button>}
+            {hasMore && <button className="btn btn-secondary" onClick={() => changePage(page + 1)}>{t('announcements.next')}</button>}
           </div>
         )}
       </div>

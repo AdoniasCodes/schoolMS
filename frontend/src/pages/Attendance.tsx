@@ -2,11 +2,13 @@ import { useEffect, useMemo, useState } from 'react'
 import { supabase } from '@/lib/supabaseClient'
 import { useToast } from '@/ui/components/toast/ToastProvider'
 import { LoadingSpinner } from '@/ui/components/LoadingSpinner'
+import { useLanguage } from '@/i18n/LanguageProvider'
 
 interface ClassRow { id: string; name: string }
 interface StudentRow { id: string; first_name: string; last_name: string }
 
 export default function Attendance() {
+  const { t } = useLanguage()
   const [role, setRole] = useState<'teacher' | 'parent' | 'school_admin' | null>(null)
   const [classes, setClasses] = useState<ClassRow[]>([])
   const [selectedClass, setSelectedClass] = useState<string>('')
@@ -154,28 +156,28 @@ export default function Attendance() {
   }
 
   const statusBadge = (status: string) => {
-    if (status === 'present') return <span className="badge badge-success">Present</span>
-    if (status === 'absent') return <span className="badge badge-danger">Absent</span>
-    if (status === 'late') return <span className="badge badge-warning">Late</span>
+    if (status === 'present') return <span className="badge badge-success">{t('attendance.present')}</span>
+    if (status === 'absent') return <span className="badge badge-danger">{t('attendance.absent')}</span>
+    if (status === 'late') return <span className="badge badge-warning">{t('attendance.late')}</span>
     return <span className="badge">{status}</span>
   }
 
   return (
     <div>
-      <h2>Attendance</h2>
+      <h2>{t('attendance.title')}</h2>
 
       {/* Parent view */}
       {role === 'parent' && (
         <div className="card">
           {children.length === 0 ? (
-            <p className="helper">No children linked to your account.</p>
+            <p className="helper">{t('attendance.noChildren')}</p>
           ) : (
             <>
               {children.length > 1 && (
                 <div style={{ marginBottom: 12 }}>
-                  <label className="helper">Select Child</label>
+                  <label className="helper">{t('attendance.selectChild')}</label>
                   <select value={selectedChild} onChange={e => setSelectedChild(e.target.value)}>
-                    <option value="">Choose...</option>
+                    <option value="">{t('attendance.choose')}</option>
                     {children.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
                   </select>
                 </div>
@@ -186,25 +188,25 @@ export default function Attendance() {
                     <div className="grid cols-3" style={{ gap: 8, marginBottom: 12 }}>
                       <div className="card" style={{ textAlign: 'center', padding: 10 }}>
                         <div style={{ fontSize: 20, fontWeight: 700, color: '#166534' }}>{s.present}</div>
-                        <div className="helper">Present</div>
+                        <div className="helper">{t('attendance.present')}</div>
                       </div>
                       <div className="card" style={{ textAlign: 'center', padding: 10 }}>
                         <div style={{ fontSize: 20, fontWeight: 700, color: '#dc2626' }}>{s.absent}</div>
-                        <div className="helper">Absent</div>
+                        <div className="helper">{t('attendance.absent')}</div>
                       </div>
                       <div className="card" style={{ textAlign: 'center', padding: 10 }}>
                         <div style={{ fontSize: 20, fontWeight: 700, color: '#92400e' }}>{s.late}</div>
-                        <div className="helper">Late</div>
+                        <div className="helper">{t('attendance.late')}</div>
                       </div>
                     </div>
                   ) : null })()}
                   {loadingHistory ? (
                     <div className="skeleton" style={{ height: 60, borderRadius: 8 }} />
                   ) : attendanceHistory.length === 0 ? (
-                    <p className="helper">No attendance records this month.</p>
+                    <p className="helper">{t('attendance.noRecords')}</p>
                   ) : (
                     <table>
-                      <thead><tr><th>Date</th><th>Status</th><th>Class</th><th>Notes</th></tr></thead>
+                      <thead><tr><th>{t('attendance.date')}</th><th>{t('attendance.status')}</th><th>{t('attendance.class')}</th><th>{t('attendance.notes')}</th></tr></thead>
                       <tbody>
                         {attendanceHistory.map(a => (
                           <tr key={a.date + a.class_name}>
@@ -226,7 +228,7 @@ export default function Attendance() {
 
       {/* Admin/other non-teacher view */}
       {role !== 'teacher' && role !== 'parent' && (
-        <p className="helper">Attendance marking is available to teachers. Parents can view attendance history above.</p>
+        <p className="helper">{t('attendance.parentNote')}</p>
       )}
 
       {/* Teacher view */}
@@ -237,14 +239,14 @@ export default function Attendance() {
             <div className="skeleton" style={{ width: 200, height: 36, borderRadius: 8 }} />
           ) : (
             <select id="classSel" aria-label="Select class" value={selectedClass} onChange={(e) => setSelectedClass(e.target.value)}>
-              <option value="">Select class</option>
+              <option value="">{t('attendance.selectClass')}</option>
               {classes.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
             </select>
           )}
           <label htmlFor="dateSel" className="helper">Date</label>
           <input id="dateSel" type="date" aria-label="Select date" value={date} onChange={(e) => setDate(e.target.value)} />
           <button className="btn btn-primary" onClick={save} disabled={!selectedClass || saving} aria-label="Save attendance" style={{ display:'inline-flex', alignItems:'center', gap:8, minWidth:96, justifyContent:'center' }}>
-            {saving ? (<><LoadingSpinner size="sm" /> Saving…</>) : 'Save'}
+            {saving ? (<><LoadingSpinner size="sm" /> {t('common.saving')}</>) : t('attendance.save')}
           </button>
         </div>
       )}
@@ -254,7 +256,7 @@ export default function Attendance() {
       )}
 
       {!selectedClass ? (
-        role === 'teacher' ? <p className="helper">Select a class to begin.</p> : null
+        role === 'teacher' ? <p className="helper">{t('attendance.selectClassPrompt')}</p> : null
       ) : loadingStudents ? (
         <ul style={{ listStyle: 'none', padding: 0, display: 'grid', gap: 8 }}>
           {Array.from({ length: 6 }).map((_, i) => (
@@ -264,20 +266,20 @@ export default function Attendance() {
           ))}
         </ul>
       ) : students.length === 0 ? (
-        <p className="helper">No students in this class.</p>
+        <p className="helper">{t('attendance.noStudents')}</p>
       ) : (
         <>
         {studentsError && (
           <p className="helper" role="status" style={{ color: 'var(--danger)' }}>{studentsError}</p>
         )}
         <div style={{ display:'flex', gap:8, marginBottom:8 }}>
-          <button className="btn btn-secondary" onClick={() => markAll('present')} aria-label="Mark all present">All Present</button>
-          <button className="btn btn-secondary" onClick={() => markAll('absent')} aria-label="Mark all absent">All Absent</button>
+          <button className="btn btn-secondary" onClick={() => markAll('present')} aria-label="Mark all present">{t('attendance.allPresent')}</button>
+          <button className="btn btn-secondary" onClick={() => markAll('absent')} aria-label="Mark all absent">{t('attendance.allAbsent')}</button>
         </div>
         <table width="100%" cellPadding="8" style={{ borderCollapse: 'collapse' }}>
           <thead>
             <tr>
-              <th align="left">Student</th>
+              <th align="left">{t('attendance.student')}</th>
               {statuses.map(s => <th key={s}>{s}</th>)}
             </tr>
           </thead>

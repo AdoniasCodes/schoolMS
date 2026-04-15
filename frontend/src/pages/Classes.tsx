@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabaseClient'
 import { useToast } from '@/ui/components/toast/ToastProvider'
 import { LoadingSpinner } from '@/ui/components/LoadingSpinner'
+import { useLanguage } from '@/i18n/LanguageProvider'
 
 interface TeacherOption { id: string; full_name: string }
 interface ClassRow {
@@ -13,6 +14,8 @@ interface ClassRow {
 }
 interface EnrolledStudent { enrollment_id: string; student_id: string; first_name: string; last_name: string }
 interface StudentOption { id: string; first_name: string; last_name: string }
+interface SubjectOption { id: string; name: string; name_am: string | null }
+interface SubjectTeacher { id: string; subject_id: string; subject_name: string; teacher_id: string; teacher_name: string }
 
 type Role = 'teacher' | 'parent' | 'school_admin'
 
@@ -20,6 +23,7 @@ const GRADES = ['KG', '1', '2', '3', '4', '5', '6', '7', '8']
 
 export default function Classes() {
   const { show } = useToast()
+  const { t } = useLanguage()
   const [role, setRole] = useState<Role | null>(null)
   const [schoolId, setSchoolId] = useState<string | null>(null)
   const [classes, setClasses] = useState<ClassRow[]>([])
@@ -46,6 +50,13 @@ export default function Classes() {
   const [enrollStudentId, setEnrollStudentId] = useState('')
   const [loadingEnroll, setLoadingEnroll] = useState(false)
   const [enrollSaving, setEnrollSaving] = useState(false)
+
+  // Subject-teacher assignment
+  const [subjectTeachers, setSubjectTeachers] = useState<SubjectTeacher[]>([])
+  const [availableSubjects, setAvailableSubjects] = useState<SubjectOption[]>([])
+  const [assignSubjectId, setAssignSubjectId] = useState('')
+  const [assignTeacherId, setAssignTeacherId] = useState('')
+  const [savingCST, setSavingCST] = useState(false)
 
   const loadClasses = async (sid?: string) => {
     const { data: { user } } = await supabase.auth.getUser()
@@ -183,6 +194,9 @@ export default function Classes() {
       .order('first_name')
     setAllStudents(allStuds ?? [])
     setEnrollStudentId('')
+    // Load subject-teachers for this class
+    const cls = classes.find(c => c.id === classId)
+    await loadSubjectTeachers(classId, cls?.grade_level ?? null)
     setLoadingEnroll(false)
   }
 
@@ -212,7 +226,64 @@ export default function Classes() {
     }
   }
 
+  const loadSubjectTeachers = async (classId: string, gradeLevel: string | null) => {
+    // Load existing assignments
+    const { data: cstData } = await supabase
+      .from('class_subject_teachers')
+      .select('id, subject_id, teacher_id, subjects(name), teachers(users(full_name))')
+      .eq('class_id', classId)
+    setSubjectTeachers((cstData ?? []).map((row: any) => ({
+      id: row.id,
+      subject_id: row.subject_id,
+      subject_name: row.subjects?.name ?? '',
+      teacher_id: row.teacher_id,
+      teacher_name: row.teachers?.users?.full_name ?? '',
+    })))
+
+    // Load subjects for this grade level
+    if (gradeLevel) {
+      const { data: subData } = await supabase
+        .from('subjects')
+        .select('id, name, name_am')
+        .is('deleted_at', null)
+        .contains('grade_levels', [gradeLevel])
+        .order('name')
+      setAvailableSubjects(subData ?? [])
+    } else {
+      setAvailableSubjects([])
+    }
+  }
+
+  const handleAssignSubjectTeacher = async () => {
+    if (!assignSubjectId || !assignTeacherId || !expandedClass || !schoolId) return
+    setSavingCST(true)
+    const { error } = await supabase.from('class_subject_teachers').upsert({
+      school_id: schoolId,
+      class_id: expandedClass,
+      subject_id: assignSubjectId,
+      teacher_id: assignTeacherId,
+    }, { onConflict: 'class_id,subject_id' })
+    if (error) show(error.message, 'error')
+    else {
+      show('Subject teacher assigned', 'success')
+      setAssignSubjectId(''); setAssignTeacherId('')
+      const cls = classes.find(c => c.id === expandedClass)
+      loadSubjectTeachers(expandedClass, cls?.grade_level ?? null)
+    }
+    setSavingCST(false)
+  }
+
+  const handleRemoveCST = async (cstId: string) => {
+    if (!confirm('Remove this subject assignment?')) return
+    await supabase.from('class_subject_teachers').delete().eq('id', cstId)
+    if (expandedClass) {
+      const cls = classes.find(c => c.id === expandedClass)
+      loadSubjectTeachers(expandedClass, cls?.grade_level ?? null)
+    }
+  }
+
   const unenrolledStudents = allStudents.filter(s => !enrolled.some(e => e.student_id === s.id))
+  const unassignedSubjects = availableSubjects.filter(s => !subjectTeachers.some(st => st.subject_id === s.id))
 
   if (loading) return (
     <div className="card">
@@ -226,55 +297,55 @@ export default function Classes() {
     <div className="grid" style={{ gap: 16 }}>
       <div className="card">
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-          <h2 style={{ margin: 0 }}>Classes</h2>
+          <h2 style={{ margin: 0 }}>{t('classes.title')}</h2>
           {role === 'school_admin' && !showCreate && (
-            <button className="btn btn-primary" onClick={() => setShowCreate(true)}>+ Add Class</button>
+            <button className="btn btn-primary" onClick={() => setShowCreate(true)}>{t('classes.add')}</button>
           )}
         </div>
 
         {/* Create form */}
         {showCreate && role === 'school_admin' && (
           <div className="card" style={{ marginBottom: 16, background: 'var(--bg)' }}>
-            <h4 style={{ margin: '0 0 12px 0' }}>New Class</h4>
+            <h4 style={{ margin: '0 0 12px 0' }}>{t('classes.new')}</h4>
             <div className="grid cols-3" style={{ gap: 12 }}>
               <div>
-                <label className="helper">Name *</label>
-                <input value={formName} onChange={e => setFormName(e.target.value)} placeholder="e.g. Grade 1 - A" />
+                <label className="helper">{t('classes.name')}</label>
+                <input value={formName} onChange={e => setFormName(e.target.value)} placeholder={t('classes.namePlaceholder')} />
               </div>
               <div>
-                <label className="helper">Grade Level</label>
+                <label className="helper">{t('classes.gradeLevel')}</label>
                 <select value={formGrade} onChange={e => setFormGrade(e.target.value)}>
-                  <option value="">Select grade</option>
+                  <option value="">{t('classes.selectGrade')}</option>
                   {GRADES.map(g => <option key={g} value={g}>{g}</option>)}
                 </select>
               </div>
               <div>
-                <label className="helper">Assigned Teacher</label>
+                <label className="helper">{t('classes.assignedTeacher')}</label>
                 <select value={formTeacher} onChange={e => setFormTeacher(e.target.value)}>
-                  <option value="">None</option>
+                  <option value="">{t('classes.noneAssigned')}</option>
                   {teachers.map(t => <option key={t.id} value={t.id}>{t.full_name}</option>)}
                 </select>
               </div>
             </div>
             <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
               <button className="btn btn-primary" onClick={handleCreate} disabled={saving || !formName.trim()}>
-                {saving ? <><LoadingSpinner size="sm" /> Saving...</> : 'Create'}
+                {saving ? <><LoadingSpinner size="sm" /> {t('common.saving')}</> : t('classes.create')}
               </button>
-              <button className="btn btn-secondary" onClick={() => setShowCreate(false)}>Cancel</button>
+              <button className="btn btn-secondary" onClick={() => setShowCreate(false)}>{t('common.cancel')}</button>
             </div>
           </div>
         )}
 
         {classes.length === 0 ? (
-          <div className="empty">No classes yet.{role === 'school_admin' && ' Click "Add Class" to create one.'}</div>
+          <div className="empty">{t('classes.noClasses')}</div>
         ) : (
           <table>
             <thead>
               <tr>
-                <th>Name</th>
-                <th>Grade</th>
-                {role !== 'teacher' && <th>Teacher</th>}
-                {role === 'school_admin' && <th style={{ width: 180 }}>Actions</th>}
+                <th>{t('common.name')}</th>
+                <th>{t('classes.grade')}</th>
+                {role !== 'teacher' && <th>{t('classes.teacher')}</th>}
+                {role === 'school_admin' && <th style={{ width: 180 }}>{t('common.actions')}</th>}
               </tr>
             </thead>
             <tbody>
@@ -292,16 +363,16 @@ export default function Classes() {
                     </td>
                     <td>
                       <select value={editTeacher} onChange={e => setEditTeacher(e.target.value)} style={{ padding: '6px 8px' }}>
-                        <option value="">None</option>
+                        <option value="">{t('classes.noneAssigned')}</option>
                         {teachers.map(t => <option key={t.id} value={t.id}>{t.full_name}</option>)}
                       </select>
                     </td>
                     <td>
                       <div style={{ display: 'flex', gap: 6 }}>
                         <button className="btn btn-primary" style={{ padding: '6px 10px', fontSize: 13 }} onClick={() => handleEdit(c.id)} disabled={saving}>
-                          {saving ? <LoadingSpinner size="sm" /> : 'Save'}
+                          {saving ? <LoadingSpinner size="sm" /> : t('common.save')}
                         </button>
-                        <button className="btn btn-secondary" style={{ padding: '6px 10px', fontSize: 13 }} onClick={() => setEditId(null)}>Cancel</button>
+                        <button className="btn btn-secondary" style={{ padding: '6px 10px', fontSize: 13 }} onClick={() => setEditId(null)}>{t('common.cancel')}</button>
                       </div>
                     </td>
                   </tr>
@@ -314,10 +385,10 @@ export default function Classes() {
                       <td onClick={e => e.stopPropagation()}>
                         <div style={{ display: 'flex', gap: 6 }}>
                           <button className="btn btn-primary" style={{ padding: '4px 8px', fontSize: 13 }} onClick={() => toggleEnrollment(c.id)}>
-                            {expandedClass === c.id ? 'Close' : 'Enroll'}
+                            {expandedClass === c.id ? t('common.close') : t('classes.enroll')}
                           </button>
-                          <button className="btn btn-ghost" style={{ padding: '4px 8px', fontSize: 13 }} onClick={() => startEdit(c)}>Edit</button>
-                          <button className="btn btn-ghost" style={{ padding: '4px 8px', fontSize: 13, color: '#dc2626' }} onClick={() => handleDelete(c.id, c.name)}>Delete</button>
+                          <button className="btn btn-ghost" style={{ padding: '4px 8px', fontSize: 13 }} onClick={() => startEdit(c)}>{t('common.edit')}</button>
+                          <button className="btn btn-ghost" style={{ padding: '4px 8px', fontSize: 13, color: '#dc2626' }} onClick={() => handleDelete(c.id, c.name)}>{t('common.delete')}</button>
                         </div>
                       </td>
                     )}
@@ -332,7 +403,7 @@ export default function Classes() {
         {expandedClass && role === 'school_admin' && (
           <div className="card" style={{ marginTop: 12, background: 'var(--bg)' }}>
             <h4 style={{ margin: '0 0 8px 0' }}>
-              Enrolled Students — {classes.find(c => c.id === expandedClass)?.name}
+              {t('classes.enrolledStudents')} — {classes.find(c => c.id === expandedClass)?.name}
             </h4>
 
             {loadingEnroll ? (
@@ -340,7 +411,7 @@ export default function Classes() {
             ) : (
               <>
                 {enrolled.length === 0 ? (
-                  <p className="helper">No students enrolled yet.</p>
+                  <p className="helper">{t('classes.noEnrolled')}</p>
                 ) : (
                   <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 12 }}>
                     {enrolled.map(e => (
@@ -359,22 +430,67 @@ export default function Classes() {
                 {unenrolledStudents.length > 0 && (
                   <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
                     <select value={enrollStudentId} onChange={e => setEnrollStudentId(e.target.value)} style={{ maxWidth: 240, padding: '6px 8px' }}>
-                      <option value="">Add a student...</option>
+                      <option value="">{t('classes.addStudent')}</option>
                       {unenrolledStudents.map(s => (
                         <option key={s.id} value={s.id}>{s.first_name} {s.last_name}</option>
                       ))}
                     </select>
                     <button className="btn btn-primary" style={{ padding: '6px 12px', fontSize: 13 }} onClick={handleEnroll} disabled={!enrollStudentId || enrollSaving}>
-                      {enrollSaving ? <LoadingSpinner size="sm" /> : 'Enroll'}
+                      {enrollSaving ? <LoadingSpinner size="sm" /> : t('classes.enroll')}
                     </button>
                   </div>
                 )}
 
                 {unenrolledStudents.length === 0 && allStudents.length > 0 && (
-                  <p className="helper">All students are enrolled in this class.</p>
+                  <p className="helper">{t('classes.allEnrolled')}</p>
                 )}
               </>
             )}
+          </div>
+        )}
+        {/* Subject-Teacher Assignment panel */}
+        {expandedClass && role === 'school_admin' && !loadingEnroll && (
+          <div className="card" style={{ marginTop: 12, background: 'var(--bg)' }}>
+            <h4 style={{ margin: '0 0 8px 0' }}>
+              {t('classes.subjectTeachers')} — {classes.find(c => c.id === expandedClass)?.name}
+            </h4>
+
+            {subjectTeachers.length > 0 && (
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 12 }}>
+                {subjectTeachers.map(st => (
+                  <span key={st.id} className="badge" style={{ gap: 6, padding: '6px 10px' }}>
+                    <strong>{st.subject_name}</strong> — {st.teacher_name}
+                    <button
+                      onClick={() => handleRemoveCST(st.id)}
+                      style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#dc2626', padding: 0, fontSize: 14, lineHeight: 1 }}
+                      title="Remove"
+                    >&times;</button>
+                  </span>
+                ))}
+              </div>
+            )}
+
+            {unassignedSubjects.length > 0 && teachers.length > 0 ? (
+              <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+                <select value={assignSubjectId} onChange={e => setAssignSubjectId(e.target.value)} style={{ maxWidth: 200, padding: '6px 8px' }}>
+                  <option value="">{t('reportCards.subject')}...</option>
+                  {unassignedSubjects.map(s => (
+                    <option key={s.id} value={s.id}>{s.name}{s.name_am ? ` (${s.name_am})` : ''}</option>
+                  ))}
+                </select>
+                <select value={assignTeacherId} onChange={e => setAssignTeacherId(e.target.value)} style={{ maxWidth: 200, padding: '6px 8px' }}>
+                  <option value="">{t('classes.teacher')}...</option>
+                  {teachers.map(tc => (
+                    <option key={tc.id} value={tc.id}>{tc.full_name}</option>
+                  ))}
+                </select>
+                <button className="btn btn-primary" style={{ padding: '6px 12px', fontSize: 13 }} onClick={handleAssignSubjectTeacher} disabled={!assignSubjectId || !assignTeacherId || savingCST}>
+                  {savingCST ? <LoadingSpinner size="sm" /> : t('classes.assignSubject')}
+                </button>
+              </div>
+            ) : availableSubjects.length === 0 ? (
+              <p className="helper">{t('grades.noAssignments')}</p>
+            ) : null}
           </div>
         )}
       </div>

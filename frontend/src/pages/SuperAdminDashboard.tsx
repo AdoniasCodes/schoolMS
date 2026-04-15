@@ -1,9 +1,10 @@
 import { useEffect, useState } from 'react'
-import { supabase } from '@/lib/supabaseClient'
+import { supabase, createNonPersistingClient } from '@/lib/supabaseClient'
 import { useToast } from '@/ui/components/toast/ToastProvider'
 import { LoadingSpinner } from '@/ui/components/LoadingSpinner'
 import { Building2, Users, GraduationCap, UserCheck } from 'lucide-react'
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from 'recharts'
+import { useLanguage } from '@/i18n/LanguageProvider'
 
 interface SchoolRow {
   id: string
@@ -19,6 +20,7 @@ interface SchoolRow {
 
 export default function SuperAdminDashboard() {
   const { show } = useToast()
+  const { t } = useLanguage()
   const [loading, setLoading] = useState(true)
   const [schools, setSchools] = useState<SchoolRow[]>([])
   const [totalStudents, setTotalStudents] = useState(0)
@@ -30,6 +32,9 @@ export default function SuperAdminDashboard() {
   const [newName, setNewName] = useState('')
   const [newAddress, setNewAddress] = useState('')
   const [newPhone, setNewPhone] = useState('')
+  const [adminFullName, setAdminFullName] = useState('')
+  const [adminEmail, setAdminEmail] = useState('')
+  const [adminPassword, setAdminPassword] = useState('')
   const [saving, setSaving] = useState(false)
 
   // Expanded school
@@ -93,20 +98,59 @@ export default function SuperAdminDashboard() {
   useEffect(() => { loadData() }, [])
 
   const addSchool = async () => {
-    if (!newName.trim()) return
+    if (!newName.trim() || !adminEmail.trim() || !adminPassword.trim() || !adminFullName.trim()) return
+    if (adminPassword.length < 6) { show('Password must be at least 6 characters', 'error'); return }
     setSaving(true)
-    const { error } = await supabase.from('schools').insert({
+
+    // 1. Create school
+    const { data: schoolData, error: schoolErr } = await supabase.from('schools').insert({
       name: newName.trim(),
       address: newAddress.trim() || null,
       phone: newPhone.trim() || null,
-    })
-    if (error) { show(error.message, 'error') }
-    else {
-      show('School created', 'success')
-      setNewName(''); setNewAddress(''); setNewPhone('')
-      setShowAddSchool(false)
-      await loadData()
+    }).select('id').single()
+
+    if (schoolErr || !schoolData) {
+      show(schoolErr?.message ?? 'Failed to create school', 'error')
+      setSaving(false)
+      return
     }
+
+    const schoolId = schoolData.id
+
+    // 2. Create auth user with a non-persisting client (won't affect current session)
+    const tempClient = createNonPersistingClient()
+    const { data: authData, error: authErr } = await tempClient.auth.signUp({
+      email: adminEmail.trim(),
+      password: adminPassword,
+      options: { data: { full_name: adminFullName.trim() } },
+    })
+
+    if (authErr || !authData.user) {
+      show(`School created but admin account failed: ${authErr?.message ?? 'Unknown error'}`, 'error')
+      setSaving(false)
+      await loadData()
+      return
+    }
+
+    // 3. Insert into public.users with school_admin role
+    const { error: userErr } = await supabase.from('users').upsert({
+      id: authData.user.id,
+      full_name: adminFullName.trim(),
+      email: adminEmail.trim(),
+      role_key: 'school_admin',
+      school_id: schoolId,
+    }, { onConflict: 'id' })
+
+    if (userErr) {
+      show(`School & auth created but user record failed: ${userErr.message}`, 'error')
+    } else {
+      show(`School "${newName.trim()}" created with admin ${adminEmail.trim()}`, 'success')
+    }
+
+    setNewName(''); setNewAddress(''); setNewPhone('')
+    setAdminFullName(''); setAdminEmail(''); setAdminPassword('')
+    setShowAddSchool(false)
+    await loadData()
     setSaving(false)
   }
 
@@ -160,17 +204,17 @@ export default function SuperAdminDashboard() {
   return (
     <div style={{ display: 'grid', gap: 16 }}>
       <div className="dash-header">
-        <h2>Platform Overview</h2>
-        <p>Manage all schools and monitor platform health</p>
+        <h2>{t('super.title')}</h2>
+        <p>{t('super.subtitle')}</p>
       </div>
 
       {/* Stats */}
       <div className="stat-grid cols-4">
         {[
-          { label: 'Schools', value: schools.length, color: '#3b82f6', icon: <Building2 size={24} /> },
-          { label: 'Students', value: totalStudents, color: '#8b5cf6', icon: <Users size={24} /> },
-          { label: 'Teachers', value: totalTeachers, color: '#22c55e', icon: <GraduationCap size={24} /> },
-          { label: 'Parents', value: totalParents, color: '#f59e0b', icon: <UserCheck size={24} /> },
+          { label: t('super.schools'), value: schools.length, color: '#3b82f6', icon: <Building2 size={24} /> },
+          { label: t('super.students'), value: totalStudents, color: '#8b5cf6', icon: <Users size={24} /> },
+          { label: t('super.teachers'), value: totalTeachers, color: '#22c55e', icon: <GraduationCap size={24} /> },
+          { label: t('super.parents'), value: totalParents, color: '#f59e0b', icon: <UserCheck size={24} /> },
         ].map((s, i) => (
           <div key={i} className="stat-card">
             <div className="stat-card-accent" style={{ background: s.color }} />
@@ -184,7 +228,7 @@ export default function SuperAdminDashboard() {
       {/* Subscription chart */}
       {statusPie.length > 0 && (
         <div className="chart-card">
-          <h3>Subscription Status</h3>
+          <h3>{t('super.subscriptionStatus')}</h3>
           <div style={{ display: 'flex', alignItems: 'center', gap: 24 }}>
             <ResponsiveContainer width={160} height={160}>
               <PieChart>
@@ -210,31 +254,59 @@ export default function SuperAdminDashboard() {
       {/* Schools management */}
       <div className="chart-card">
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-          <h3 style={{ margin: 0 }}>Schools</h3>
+          <h3 style={{ margin: 0 }}>{t('super.schools')}</h3>
           <button className="btn btn-primary" onClick={() => setShowAddSchool(!showAddSchool)}>
-            {showAddSchool ? 'Cancel' : '+ Add School'}
+            {showAddSchool ? t('common.cancel') : t('super.addSchool')}
           </button>
         </div>
 
         {showAddSchool && (
-          <div style={{ display: 'grid', gap: 12, marginBottom: 20, padding: 16, background: 'var(--bg)', borderRadius: 8 }}>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 12 }}>
-              <div>
-                <label className="helper">School Name *</label>
-                <input value={newName} onChange={e => setNewName(e.target.value)} placeholder="School name" />
-              </div>
-              <div>
-                <label className="helper">Address</label>
-                <input value={newAddress} onChange={e => setNewAddress(e.target.value)} placeholder="Address" />
-              </div>
-              <div>
-                <label className="helper">Phone</label>
-                <input value={newPhone} onChange={e => setNewPhone(e.target.value)} placeholder="Phone" />
+          <div style={{ display: 'grid', gap: 16, marginBottom: 20, padding: 16, background: 'var(--bg)', borderRadius: 8 }}>
+            {/* School info */}
+            <div>
+              <div style={{ fontWeight: 600, fontSize: 14, marginBottom: 8 }}>School Information</div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 12 }}>
+                <div>
+                  <label className="helper">{t('super.schoolName')}</label>
+                  <input value={newName} onChange={e => setNewName(e.target.value)} placeholder={t('super.schoolNamePlaceholder')} />
+                </div>
+                <div>
+                  <label className="helper">{t('super.address')}</label>
+                  <input value={newAddress} onChange={e => setNewAddress(e.target.value)} placeholder={t('super.address')} />
+                </div>
+                <div>
+                  <label className="helper">{t('super.phone')}</label>
+                  <input value={newPhone} onChange={e => setNewPhone(e.target.value)} placeholder={t('super.phone')} />
+                </div>
               </div>
             </div>
+
+            {/* Admin account */}
             <div>
-              <button className="btn btn-primary" onClick={addSchool} disabled={saving || !newName.trim()}>
-                {saving ? <><LoadingSpinner size="sm" /> Creating...</> : 'Create School'}
+              <div style={{ fontWeight: 600, fontSize: 14, marginBottom: 8 }}>School Admin Account</div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 12 }}>
+                <div>
+                  <label className="helper">Full Name *</label>
+                  <input value={adminFullName} onChange={e => setAdminFullName(e.target.value)} placeholder="Admin full name" />
+                </div>
+                <div>
+                  <label className="helper">Email *</label>
+                  <input type="email" value={adminEmail} onChange={e => setAdminEmail(e.target.value)} placeholder="admin@school.com" />
+                </div>
+                <div>
+                  <label className="helper">Temporary Password *</label>
+                  <input type="password" value={adminPassword} onChange={e => setAdminPassword(e.target.value)} placeholder="Min 6 characters" />
+                </div>
+              </div>
+            </div>
+
+            <div>
+              <button
+                className="btn btn-primary"
+                onClick={addSchool}
+                disabled={saving || !newName.trim() || !adminEmail.trim() || !adminPassword.trim() || !adminFullName.trim()}
+              >
+                {saving ? <><LoadingSpinner size="sm" /> {t('common.creating')}</> : t('super.createSchool')}
               </button>
             </div>
           </div>
@@ -244,13 +316,13 @@ export default function SuperAdminDashboard() {
           <table style={{ width: '100%', borderCollapse: 'collapse' }}>
             <thead>
               <tr style={{ borderBottom: '2px solid var(--border)' }}>
-                <th style={{ textAlign: 'left', padding: '8px 12px' }}>School</th>
-                <th style={{ textAlign: 'left', padding: '8px 12px' }}>Status</th>
-                <th style={{ textAlign: 'left', padding: '8px 12px' }}>Plan</th>
-                <th style={{ textAlign: 'center', padding: '8px 12px' }}>Students</th>
-                <th style={{ textAlign: 'center', padding: '8px 12px' }}>Teachers</th>
-                <th style={{ textAlign: 'left', padding: '8px 12px' }}>Trial Ends</th>
-                <th style={{ textAlign: 'right', padding: '8px 12px' }}>Actions</th>
+                <th style={{ textAlign: 'left', padding: '8px 12px' }}>{t('super.school')}</th>
+                <th style={{ textAlign: 'left', padding: '8px 12px' }}>{t('common.status')}</th>
+                <th style={{ textAlign: 'left', padding: '8px 12px' }}>{t('super.plan')}</th>
+                <th style={{ textAlign: 'center', padding: '8px 12px' }}>{t('super.students')}</th>
+                <th style={{ textAlign: 'center', padding: '8px 12px' }}>{t('super.teachers')}</th>
+                <th style={{ textAlign: 'left', padding: '8px 12px' }}>{t('super.trialEnds')}</th>
+                <th style={{ textAlign: 'right', padding: '8px 12px' }}>{t('common.actions')}</th>
               </tr>
             </thead>
             <tbody>
@@ -264,10 +336,10 @@ export default function SuperAdminDashboard() {
                     <td style={{ padding: '10px 12px' }}>
                       {editingId === s.id ? (
                         <select value={editStatus} onChange={e => setEditStatus(e.target.value)} style={{ fontSize: 13, padding: '2px 6px' }}>
-                          <option value="trial">Trial</option>
-                          <option value="active">Active</option>
-                          <option value="suspended">Suspended</option>
-                          <option value="cancelled">Cancelled</option>
+                          <option value="trial">{t('super.trial')}</option>
+                          <option value="active">{t('super.active')}</option>
+                          <option value="suspended">{t('super.suspended')}</option>
+                          <option value="cancelled">{t('super.cancelled')}</option>
                         </select>
                       ) : (
                         <span className={`badge ${statusColor(s.subscription_status)}`}>{s.subscription_status}</span>
@@ -276,9 +348,9 @@ export default function SuperAdminDashboard() {
                     <td style={{ padding: '10px 12px' }}>
                       {editingId === s.id ? (
                         <select value={editPlan} onChange={e => setEditPlan(e.target.value)} style={{ fontSize: 13, padding: '2px 6px' }}>
-                          <option value="basic">Basic</option>
-                          <option value="standard">Standard</option>
-                          <option value="premium">Premium</option>
+                          <option value="basic">{t('super.basic')}</option>
+                          <option value="standard">{t('super.standard')}</option>
+                          <option value="premium">{t('super.premium')}</option>
                         </select>
                       ) : (
                         <span style={{ fontSize: 13, textTransform: 'capitalize' }}>{s.subscription_plan}</span>
@@ -292,8 +364,8 @@ export default function SuperAdminDashboard() {
                     <td style={{ padding: '10px 12px', textAlign: 'right' }}>
                       {editingId === s.id ? (
                         <div style={{ display: 'flex', gap: 4, justifyContent: 'flex-end' }}>
-                          <button className="btn btn-primary" style={{ padding: '4px 10px', fontSize: 12 }} onClick={() => saveSchoolStatus(s.id)}>Save</button>
-                          <button className="btn btn-ghost" style={{ padding: '4px 10px', fontSize: 12 }} onClick={() => setEditingId(null)}>Cancel</button>
+                          <button className="btn btn-primary" style={{ padding: '4px 10px', fontSize: 12 }} onClick={() => saveSchoolStatus(s.id)}>{t('common.save')}</button>
+                          <button className="btn btn-ghost" style={{ padding: '4px 10px', fontSize: 12 }} onClick={() => setEditingId(null)}>{t('common.cancel')}</button>
                         </div>
                       ) : (
                         <div style={{ display: 'flex', gap: 4, justifyContent: 'flex-end' }}>
@@ -302,14 +374,14 @@ export default function SuperAdminDashboard() {
                             style={{ padding: '4px 10px', fontSize: 12 }}
                             onClick={() => { setEditingId(s.id); setEditStatus(s.subscription_status); setEditPlan(s.subscription_plan) }}
                           >
-                            Edit
+                            {t('common.edit')}
                           </button>
                           <button
                             className="btn btn-ghost"
                             style={{ padding: '4px 10px', fontSize: 12 }}
                             onClick={() => setExpandedSchool(expandedSchool === s.id ? null : s.id)}
                           >
-                            {expandedSchool === s.id ? 'Collapse' : 'Details'}
+                            {expandedSchool === s.id ? t('super.collapse') : t('common.details')}
                           </button>
                         </div>
                       )}
@@ -320,15 +392,15 @@ export default function SuperAdminDashboard() {
                       <td colSpan={7} style={{ padding: '12px 24px', background: 'var(--bg)' }}>
                         <div className="grid cols-3" style={{ gap: 12 }}>
                           <div>
-                            <div className="helper">Phone</div>
-                            <div>{s.phone || 'Not set'}</div>
+                            <div className="helper">{t('super.phone')}</div>
+                            <div>{s.phone || t('super.notSet')}</div>
                           </div>
                           <div>
-                            <div className="helper">Students</div>
+                            <div className="helper">{t('super.students')}</div>
                             <div>{s.student_count}</div>
                           </div>
                           <div>
-                            <div className="helper">Teachers</div>
+                            <div className="helper">{t('super.teachers')}</div>
                             <div>{s.teacher_count}</div>
                           </div>
                         </div>
@@ -342,7 +414,7 @@ export default function SuperAdminDashboard() {
         </div>
 
         {schools.length === 0 && (
-          <div className="empty" style={{ padding: 24 }}>No schools yet. Create one to get started.</div>
+          <div className="empty" style={{ padding: 24 }}>{t('super.noSchools')}</div>
         )}
       </div>
     </div>

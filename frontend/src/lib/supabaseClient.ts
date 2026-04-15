@@ -16,3 +16,16 @@ After saving, restart the dev server (npm run dev).`
 }
 
 export const supabase = createClient(supabaseUrl, supabaseAnonKey)
+
+/**
+ * A Supabase client that does NOT persist sessions.
+ * Use this to create auth users without logging out the current user.
+ */
+export const createNonPersistingClient = () =>
+  createClient(supabaseUrl!, supabaseAnonKey!, {
+    auth: {
+      persistSession: false,
+      autoRefreshToken: false,
+      detectSessionInUrl: false,
+    },
+  })

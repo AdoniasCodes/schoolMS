@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabaseClient'
 import { useToast } from '@/ui/components/toast/ToastProvider'
 import { LoadingSpinner } from '@/ui/components/LoadingSpinner'
+import { useLanguage } from '@/i18n/LanguageProvider'
 
 interface StudentRow {
   id: string
@@ -20,6 +21,7 @@ type Role = 'teacher' | 'parent' | 'school_admin'
 
 export default function Students() {
   const { show } = useToast()
+  const { t } = useLanguage()
   const [role, setRole] = useState<Role | null>(null)
   const [schoolId, setSchoolId] = useState<string | null>(null)
   const [students, setStudents] = useState<StudentRow[]>([])
@@ -192,92 +194,92 @@ export default function Students() {
     <div className="grid" style={{ gap: 16 }}>
       <div className="card">
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-          <h2 style={{ margin: 0 }}>Students</h2>
+          <h2 style={{ margin: 0 }}>{t('students.title')}</h2>
           {role === 'school_admin' && !showCreate && (
-            <button className="btn btn-primary" onClick={() => setShowCreate(true)}>+ Add Student</button>
+            <button className="btn btn-primary" onClick={() => setShowCreate(true)}>{t('students.add')}</button>
           )}
         </div>
 
         {/* Create form */}
         {showCreate && role === 'school_admin' && (
           <div className="card" style={{ marginBottom: 16, background: 'var(--bg)' }}>
-            <h4 style={{ margin: '0 0 12px 0' }}>New Student</h4>
+            <h4 style={{ margin: '0 0 12px 0' }}>{t('students.new')}</h4>
 
-            <p className="helper" style={{ margin: '0 0 8px 0' }}>Student Information</p>
+            <p className="helper" style={{ margin: '0 0 8px 0' }}>{t('students.studentInfo')}</p>
             <div className="grid cols-2" style={{ gap: 12 }}>
               <div>
-                <label className="helper">First Name *</label>
-                <input value={formFirst} onChange={e => setFormFirst(e.target.value)} placeholder="First name" />
+                <label className="helper">{t('students.firstName')}</label>
+                <input value={formFirst} onChange={e => setFormFirst(e.target.value)} placeholder={t('students.firstNamePlaceholder')} />
               </div>
               <div>
-                <label className="helper">Last Name *</label>
-                <input value={formLast} onChange={e => setFormLast(e.target.value)} placeholder="Last name" />
+                <label className="helper">{t('students.lastName')}</label>
+                <input value={formLast} onChange={e => setFormLast(e.target.value)} placeholder={t('students.lastNamePlaceholder')} />
               </div>
               <div>
-                <label className="helper">Date of Birth</label>
+                <label className="helper">{t('students.dob')}</label>
                 <input type="date" value={formDob} onChange={e => setFormDob(e.target.value)} />
               </div>
               <div>
-                <label className="helper">Gender</label>
+                <label className="helper">{t('students.gender')}</label>
                 <select value={formGender} onChange={e => setFormGender(e.target.value)}>
-                  <option value="">Select</option>
-                  <option value="male">Male</option>
-                  <option value="female">Female</option>
+                  <option value="">{t('students.select')}</option>
+                  <option value="male">{t('students.male')}</option>
+                  <option value="female">{t('students.female')}</option>
                 </select>
               </div>
             </div>
 
             <hr />
-            <p className="helper" style={{ margin: '0 0 8px 0' }}>Guardian & Emergency</p>
+            <p className="helper" style={{ margin: '0 0 8px 0' }}>{t('students.guardianInfo')}</p>
             <div className="grid cols-2" style={{ gap: 12 }}>
               <div>
-                <label className="helper">Guardian Name</label>
-                <input value={formGuardianName} onChange={e => setFormGuardianName(e.target.value)} placeholder="Parent or guardian name" />
+                <label className="helper">{t('students.guardianName')}</label>
+                <input value={formGuardianName} onChange={e => setFormGuardianName(e.target.value)} placeholder={t('students.guardianNamePlaceholder')} />
               </div>
               <div>
-                <label className="helper">Guardian Phone</label>
-                <input value={formGuardianPhone} onChange={e => setFormGuardianPhone(e.target.value)} placeholder="+251..." />
+                <label className="helper">{t('students.guardianPhone')}</label>
+                <input value={formGuardianPhone} onChange={e => setFormGuardianPhone(e.target.value)} placeholder={t('students.guardianPhonePlaceholder')} />
               </div>
               <div>
-                <label className="helper">Emergency Contact</label>
-                <input value={formEmergency} onChange={e => setFormEmergency(e.target.value)} placeholder="Emergency phone number" />
+                <label className="helper">{t('students.emergencyContact')}</label>
+                <input value={formEmergency} onChange={e => setFormEmergency(e.target.value)} placeholder={t('students.emergencyPlaceholder')} />
               </div>
             </div>
             <div style={{ marginTop: 12 }}>
-              <label className="helper">Medical Notes</label>
-              <textarea value={formMedical} onChange={e => setFormMedical(e.target.value)} rows={2} placeholder="Allergies, conditions, or special needs (optional)" />
+              <label className="helper">{t('students.medicalNotes')}</label>
+              <textarea value={formMedical} onChange={e => setFormMedical(e.target.value)} rows={2} placeholder={t('students.medicalPlaceholder')} />
             </div>
 
             <hr />
-            <p className="helper" style={{ margin: '0 0 8px 0' }}>Class Enrollment</p>
+            <p className="helper" style={{ margin: '0 0 8px 0' }}>{t('students.classEnrollment')}</p>
             <div>
-              <label className="helper">Enroll in Class</label>
+              <label className="helper">{t('students.enrollInClass')}</label>
               <select value={formClassId} onChange={e => setFormClassId(e.target.value)}>
-                <option value="">Don't enroll yet</option>
+                <option value="">{t('students.dontEnroll')}</option>
                 {availableClasses.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
               </select>
             </div>
 
             <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
               <button className="btn btn-primary" onClick={handleCreate} disabled={saving || !formFirst.trim() || !formLast.trim()}>
-                {saving ? <><LoadingSpinner size="sm" /> Saving...</> : 'Add Student'}
+                {saving ? <><LoadingSpinner size="sm" /> {t('common.saving')}</> : t('students.addStudent')}
               </button>
-              <button className="btn btn-secondary" onClick={() => { setShowCreate(false); resetCreateForm() }}>Cancel</button>
+              <button className="btn btn-secondary" onClick={() => { setShowCreate(false); resetCreateForm() }}>{t('common.cancel')}</button>
             </div>
           </div>
         )}
 
         {students.length === 0 ? (
-          <div className="empty">No students to display.{role === 'school_admin' && ' Click "Add Student" to add one.'}</div>
+          <div className="empty">{t('students.noStudents')}</div>
         ) : (
           <table>
             <thead>
               <tr>
-                <th>Name</th>
-                <th>Gender</th>
-                <th>DOB</th>
-                <th>Classes</th>
-                {role === 'school_admin' && <th style={{ width: 160 }}>Actions</th>}
+                <th>{t('common.name')}</th>
+                <th>{t('students.gender')}</th>
+                <th>{t('students.dob')}</th>
+                <th>{t('students.classEnrollment')}</th>
+                {role === 'school_admin' && <th style={{ width: 160 }}>{t('common.actions')}</th>}
               </tr>
             </thead>
             <tbody>
@@ -286,53 +288,53 @@ export default function Students() {
                   <tr key={s.id}>
                     <td colSpan={role === 'school_admin' ? 5 : 4}>
                       <div className="card" style={{ background: 'var(--bg)', margin: '4px 0' }}>
-                        <p className="helper" style={{ margin: '0 0 8px 0' }}>Edit Student</p>
+                        <p className="helper" style={{ margin: '0 0 8px 0' }}>{t('students.editStudent')}</p>
                         <div className="grid cols-2" style={{ gap: 10 }}>
                           <div>
-                            <label className="helper">First Name *</label>
+                            <label className="helper">{t('students.firstName')}</label>
                             <input value={editFirst} onChange={e => setEditFirst(e.target.value)} style={{ padding: '6px 8px' }} />
                           </div>
                           <div>
-                            <label className="helper">Last Name *</label>
+                            <label className="helper">{t('students.lastName')}</label>
                             <input value={editLast} onChange={e => setEditLast(e.target.value)} style={{ padding: '6px 8px' }} />
                           </div>
                           <div>
-                            <label className="helper">Date of Birth</label>
+                            <label className="helper">{t('students.dob')}</label>
                             <input type="date" value={editDob} onChange={e => setEditDob(e.target.value)} style={{ padding: '6px 8px' }} />
                           </div>
                           <div>
-                            <label className="helper">Gender</label>
+                            <label className="helper">{t('students.gender')}</label>
                             <select value={editGender} onChange={e => setEditGender(e.target.value)} style={{ padding: '6px 8px' }}>
-                              <option value="">Select</option>
-                              <option value="male">Male</option>
-                              <option value="female">Female</option>
+                              <option value="">{t('students.select')}</option>
+                              <option value="male">{t('students.male')}</option>
+                              <option value="female">{t('students.female')}</option>
                             </select>
                           </div>
                         </div>
                         <hr />
                         <div className="grid cols-2" style={{ gap: 10 }}>
                           <div>
-                            <label className="helper">Guardian Name</label>
+                            <label className="helper">{t('students.guardianName')}</label>
                             <input value={editGuardianName} onChange={e => setEditGuardianName(e.target.value)} style={{ padding: '6px 8px' }} />
                           </div>
                           <div>
-                            <label className="helper">Guardian Phone</label>
+                            <label className="helper">{t('students.guardianPhone')}</label>
                             <input value={editGuardianPhone} onChange={e => setEditGuardianPhone(e.target.value)} style={{ padding: '6px 8px' }} />
                           </div>
                           <div>
-                            <label className="helper">Emergency Contact</label>
+                            <label className="helper">{t('students.emergencyContact')}</label>
                             <input value={editEmergency} onChange={e => setEditEmergency(e.target.value)} style={{ padding: '6px 8px' }} />
                           </div>
                         </div>
                         <div style={{ marginTop: 10 }}>
-                          <label className="helper">Medical Notes</label>
+                          <label className="helper">{t('students.medicalNotes')}</label>
                           <textarea value={editMedical} onChange={e => setEditMedical(e.target.value)} rows={2} style={{ padding: '6px 8px' }} />
                         </div>
                         <div style={{ display: 'flex', gap: 6, marginTop: 10 }}>
                           <button className="btn btn-primary" style={{ padding: '6px 10px', fontSize: 13 }} onClick={() => handleEdit(s.id)} disabled={saving}>
-                            {saving ? <LoadingSpinner size="sm" /> : 'Save'}
+                            {saving ? <LoadingSpinner size="sm" /> : t('common.save')}
                           </button>
-                          <button className="btn btn-secondary" style={{ padding: '6px 10px', fontSize: 13 }} onClick={() => setEditId(null)}>Cancel</button>
+                          <button className="btn btn-secondary" style={{ padding: '6px 10px', fontSize: 13 }} onClick={() => setEditId(null)}>{t('common.cancel')}</button>
                         </div>
                       </div>
                     </td>
@@ -345,15 +347,15 @@ export default function Students() {
                       <td>{s.date_of_birth ?? '-'}</td>
                       <td>
                         {s.classes.length === 0
-                          ? <span className="helper">Not enrolled</span>
+                          ? <span className="helper">{t('students.notEnrolled')}</span>
                           : s.classes.map(cn => <span key={cn} className="badge" style={{ marginRight: 4 }}>{cn}</span>)
                         }
                       </td>
                       {role === 'school_admin' && (
                         <td onClick={e => e.stopPropagation()}>
                           <div style={{ display: 'flex', gap: 6 }}>
-                            <button className="btn btn-ghost" style={{ padding: '4px 8px', fontSize: 13 }} onClick={() => startEdit(s)}>Edit</button>
-                            <button className="btn btn-ghost" style={{ padding: '4px 8px', fontSize: 13, color: '#dc2626' }} onClick={() => handleDelete(s.id, `${s.first_name} ${s.last_name}`)}>Delete</button>
+                            <button className="btn btn-ghost" style={{ padding: '4px 8px', fontSize: 13 }} onClick={() => startEdit(s)}>{t('common.edit')}</button>
+                            <button className="btn btn-ghost" style={{ padding: '4px 8px', fontSize: 13, color: '#dc2626' }} onClick={() => handleDelete(s.id, `${s.first_name} ${s.last_name}`)}>{t('common.delete')}</button>
                           </div>
                         </td>
                       )}
@@ -362,13 +364,13 @@ export default function Students() {
                       <tr key={`${s.id}-detail`}>
                         <td colSpan={role === 'school_admin' ? 5 : 4} style={{ background: 'var(--bg)', padding: 12 }}>
                           <div className="grid cols-3" style={{ gap: 10, fontSize: 13 }}>
-                            <div><span className="helper">Guardian:</span> {s.guardian_name || '-'}</div>
-                            <div><span className="helper">Guardian Phone:</span> {s.guardian_phone || '-'}</div>
-                            <div><span className="helper">Emergency:</span> {s.emergency_contact || '-'}</div>
+                            <div><span className="helper">{t('students.guardian')}:</span> {s.guardian_name || '-'}</div>
+                            <div><span className="helper">{t('students.guardianPhone')}:</span> {s.guardian_phone || '-'}</div>
+                            <div><span className="helper">{t('students.emergency')}:</span> {s.emergency_contact || '-'}</div>
                           </div>
                           {s.medical_notes && (
                             <div style={{ marginTop: 6, fontSize: 13 }}>
-                              <span className="helper">Medical Notes:</span> {s.medical_notes}
+                              <span className="helper">{t('students.medicalNotes')}:</span> {s.medical_notes}
                             </div>
                           )}
                         </td>

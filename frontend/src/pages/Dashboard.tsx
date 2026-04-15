@@ -1,8 +1,10 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { supabase } from '@/lib/supabaseClient'
+import { useLanguage } from '@/i18n/LanguageProvider'
 
 export default function Dashboard() {
+  const { t } = useLanguage()
   const [profile, setProfile] = useState<any>(null)
 
   useEffect(() => {
@@ -19,7 +21,7 @@ export default function Dashboard() {
   return (
     <div className="grid" style={{ gap: 16 }}>
       <div className="card">
-        <h2 style={{ marginTop: 0 }}>Welcome</h2>
+        <h2 style={{ marginTop: 0 }}>{t('nav.dashboard')}</h2>
         {profile ? (
           <div style={{ color: '#8aa0b6' }}>
             <div><strong>Name:</strong> {profile.full_name ?? 'Unknown'}</div>
@@ -27,7 +29,7 @@ export default function Dashboard() {
             <div><strong>Language:</strong> {profile.language_preference}</div>
           </div>
         ) : (
-          <p style={{ color: '#8aa0b6' }}>Loading profile...</p>
+          <p style={{ color: '#8aa0b6' }}>{t('common.loading')}</p>
         )}
       </div>
 
@@ -35,24 +37,24 @@ export default function Dashboard() {
         <h3 style={{ marginTop: 0 }}>Quick Links</h3>
         <div className="grid cols-3">
           <Link to="/app/attendance" className="link-card card">
-            <h4>Attendance</h4>
-            <p>Mark and review daily attendance</p>
+            <h4>{t('nav.attendance')}</h4>
+            <p>{t('teacher.takeAttendanceDesc')}</p>
           </Link>
           <Link to="/app/updates" className="link-card card">
-            <h4>Updates Feed</h4>
-            <p>Post updates and view class feed</p>
+            <h4>{t('nav.updates')}</h4>
+            <p>{t('teacher.postUpdateDesc')}</p>
           </Link>
           <Link to="/app/messages" className="link-card card">
-            <h4>Messages</h4>
-            <p>1:1 parent-teacher messages</p>
+            <h4>{t('nav.messages')}</h4>
+            <p>{t('parent.viewMessagesDesc')}</p>
           </Link>
           <Link to="/app/reports" className="link-card card">
-            <h4>Progress Reports</h4>
-            <p>Upload and review student reports</p>
+            <h4>{t('nav.reports')}</h4>
+            <p>{t('parent.viewReportsDesc')}</p>
           </Link>
           <Link to="/app/announcements" className="link-card card">
-            <h4>Announcements</h4>
-            <p>School or class announcements</p>
+            <h4>{t('nav.announcements')}</h4>
+            <p>{t('admin.announceDesc')}</p>
           </Link>
         </div>
       </div>

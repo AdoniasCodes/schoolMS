@@ -1,26 +1,26 @@
 import { supabase } from '@/lib/supabaseClient'
+import { useLanguage } from '@/i18n/LanguageProvider'
 
 interface Props {
   status: 'suspended' | 'cancelled' | 'trial_expired'
 }
 
-const messages: Record<Props['status'], { title: string; body: string }> = {
-  suspended: {
-    title: 'Account Suspended',
-    body: 'Your school\'s subscription has been suspended. Please contact your school administrator or reach out to support to restore access.',
-  },
-  cancelled: {
-    title: 'Account Cancelled',
-    body: 'Your school\'s subscription has been cancelled. Please contact your school administrator if you believe this is an error.',
-  },
-  trial_expired: {
-    title: 'Free Trial Expired',
-    body: 'Your school\'s free trial has ended. Please contact your school administrator to activate a subscription and continue using the platform.',
-  },
+const titleKeys: Record<Props['status'], string> = {
+  suspended: 'inactive.suspended.title',
+  cancelled: 'inactive.cancelled.title',
+  trial_expired: 'inactive.trialExpired.title',
+}
+
+const bodyKeys: Record<Props['status'], string> = {
+  suspended: 'inactive.suspended.body',
+  cancelled: 'inactive.cancelled.body',
+  trial_expired: 'inactive.trialExpired.body',
 }
 
 export default function AccountInactive({ status }: Props) {
-  const { title, body } = messages[status]
+  const { t } = useLanguage()
+  const title = t(titleKeys[status])
+  const body = t(bodyKeys[status])
 
   const handleSignOut = async () => {
     await supabase.auth.signOut()
@@ -55,7 +55,7 @@ export default function AccountInactive({ status }: Props) {
           onClick={handleSignOut}
           style={{ width: '100%' }}
         >
-          Sign Out
+          {t('nav.signOut')}
         </button>
       </div>
     </div>

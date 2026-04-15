@@ -17,7 +17,8 @@
       "@/pages/*": ["src/pages/*"],
       "@/lib/*": ["src/lib/*"],
       "@/ui/*": ["src/ui/*"],
-      "@/auth/*": ["src/ui/auth/*"]
+      "@/auth/*": ["src/ui/auth/*"],
+      "@/i18n/*": ["src/i18n/*"]
     }
   },
   "include": ["src"]

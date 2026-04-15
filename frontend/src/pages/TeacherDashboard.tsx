@@ -1,12 +1,14 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { supabase } from '@/lib/supabaseClient'
+import { useLanguage } from '@/i18n/LanguageProvider'
 import { BookOpen, Users, FileText, ClipboardCheck, AlertTriangle } from 'lucide-react'
 import { PieChart, Pie, Cell, ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip } from 'recharts'
 
 interface ClassInfo { id: string; name: string; student_count: number; attendance_done: boolean }
 
 export default function TeacherDashboard() {
+  const { t } = useLanguage()
   const [loading, setLoading] = useState(true)
   const [stats, setStats] = useState({ classes: 0, students: 0, updatesThisWeek: 0, attendanceRate: null as number | null })
   const [myClasses, setMyClasses] = useState<ClassInfo[]>([])
@@ -84,17 +86,17 @@ export default function TeacherDashboard() {
   return (
     <div style={{ display: 'grid', gap: 16 }}>
       <div className="dash-header">
-        <h2>Teacher Dashboard</h2>
-        <p>Your classes, students, and today's activity</p>
+        <h2>{t('teacher.title')}</h2>
+        <p>{t('teacher.subtitle')}</p>
       </div>
 
       {/* Stats */}
       <div className="stat-grid cols-4">
         {[
-          { label: 'My Classes', value: stats.classes, color: '#3b82f6', icon: <BookOpen size={24} /> },
-          { label: 'My Students', value: stats.students, color: '#8b5cf6', icon: <Users size={24} /> },
-          { label: 'Updates (Week)', value: stats.updatesThisWeek, color: '#22c55e', icon: <FileText size={24} /> },
-          { label: 'Attendance', value: stats.attendanceRate != null ? `${stats.attendanceRate}%` : '\u2014', color: '#f59e0b', icon: <ClipboardCheck size={24} /> },
+          { label: t('teacher.myClasses'), value: stats.classes, color: '#3b82f6', icon: <BookOpen size={24} /> },
+          { label: t('teacher.myStudents'), value: stats.students, color: '#8b5cf6', icon: <Users size={24} /> },
+          { label: t('teacher.updatesWeek'), value: stats.updatesThisWeek, color: '#22c55e', icon: <FileText size={24} /> },
+          { label: t('teacher.attendance'), value: stats.attendanceRate != null ? `${stats.attendanceRate}%` : '\u2014', color: '#f59e0b', icon: <ClipboardCheck size={24} /> },
         ].map((s, i) => (
           <div key={i} className="stat-card">
             <div className="stat-card-accent" style={{ background: s.color }} />
@@ -110,9 +112,9 @@ export default function TeacherDashboard() {
         <div className="chart-card" style={{ borderLeft: '4px solid #f59e0b', display: 'flex', alignItems: 'center', gap: 14 }}>
           <AlertTriangle size={22} style={{ color: '#f59e0b', flexShrink: 0 }} />
           <div>
-            <div style={{ fontWeight: 700, fontSize: 14 }}>Attendance Not Taken</div>
+            <div style={{ fontWeight: 700, fontSize: 14 }}>{t('teacher.attendanceNotTaken')}</div>
             <p style={{ margin: '2px 0 0', fontSize: 13, color: 'var(--muted)' }}>
-              {unattended.map(c => c.name).join(', ')} &mdash; <Link to="/app/attendance" style={{ color: 'var(--primary)', fontWeight: 600 }}>Take attendance now</Link>
+              {unattended.map(c => c.name).join(', ')} &mdash; <Link to="/app/attendance" style={{ color: 'var(--primary)', fontWeight: 600 }}>{t('teacher.takeAttendanceNow')}</Link>
             </p>
           </div>
         </div>
@@ -121,7 +123,7 @@ export default function TeacherDashboard() {
       {/* Charts */}
       <div className="grid cols-2" style={{ gap: 12 }}>
         <div className="chart-card">
-          <h3>Today's Attendance</h3>
+          <h3>{t('teacher.todaysAttendance')}</h3>
           {attendancePie.length > 0 ? (
             <div style={{ display: 'flex', alignItems: 'center', gap: 20 }}>
               <ResponsiveContainer width={140} height={140}>
@@ -141,12 +143,12 @@ export default function TeacherDashboard() {
               </div>
             </div>
           ) : (
-            <div className="empty" style={{ padding: 32 }}>No attendance recorded today</div>
+            <div className="empty" style={{ padding: 32 }}>{t('teacher.noAttendance')}</div>
           )}
         </div>
 
         <div className="chart-card">
-          <h3>Students per Class</h3>
+          <h3>{t('teacher.studentsPerClass')}</h3>
           {classStudents.length > 0 ? (
             <ResponsiveContainer width="100%" height={140}>
               <BarChart data={classStudents}>
@@ -157,7 +159,7 @@ export default function TeacherDashboard() {
               </BarChart>
             </ResponsiveContainer>
           ) : (
-            <div className="empty" style={{ padding: 32 }}>No classes assigned</div>
+            <div className="empty" style={{ padding: 32 }}>{t('teacher.noClasses')}</div>
           )}
         </div>
       </div>
@@ -166,29 +168,29 @@ export default function TeacherDashboard() {
       <div className="grid cols-3 quick-actions">
         <Link to="/app/attendance" className="quick-action">
           <div className="quick-action-icon" style={{ background: '#22c55e' }}><ClipboardCheck size={20} /></div>
-          <div><h4>Take Attendance</h4><p>Mark today's attendance</p></div>
+          <div><h4>{t('teacher.takeAttendance')}</h4><p>{t('teacher.takeAttendanceDesc')}</p></div>
         </Link>
         <Link to="/app/updates" className="quick-action">
           <div className="quick-action-icon" style={{ background: '#3b82f6' }}><FileText size={20} /></div>
-          <div><h4>Post Update</h4><p>Share with parents</p></div>
+          <div><h4>{t('teacher.postUpdate')}</h4><p>{t('teacher.postUpdateDesc')}</p></div>
         </Link>
         <Link to="/app/reports" className="quick-action">
           <div className="quick-action-icon" style={{ background: '#8b5cf6' }}><BookOpen size={20} /></div>
-          <div><h4>Progress Reports</h4><p>Create student reports</p></div>
+          <div><h4>{t('teacher.progressReports')}</h4><p>{t('teacher.progressReportsDesc')}</p></div>
         </Link>
       </div>
 
       {/* My Classes table */}
       <div className="chart-card">
-        <h3>My Classes</h3>
-        {myClasses.length === 0 ? <div className="empty">No classes assigned</div> : (
+        <h3>{t('teacher.myClasses')}</h3>
+        {myClasses.length === 0 ? <div className="empty">{t('teacher.noClasses')}</div> : (
           <table>
-            <thead><tr><th>Class</th><th>Students</th><th>Attendance</th></tr></thead>
+            <thead><tr><th>{t('teacher.class')}</th><th>{t('admin.students')}</th><th>{t('teacher.attendance')}</th></tr></thead>
             <tbody>{myClasses.map(c => (
               <tr key={c.id}>
                 <td style={{ fontWeight: 600 }}>{c.name}</td>
                 <td>{c.student_count}</td>
-                <td>{c.attendance_done ? <span className="badge badge-success">Done</span> : c.student_count > 0 ? <span className="badge badge-warning">Pending</span> : <span className="helper">No students</span>}</td>
+                <td>{c.attendance_done ? <span className="badge badge-success">{t('teacher.done')}</span> : c.student_count > 0 ? <span className="badge badge-warning">{t('teacher.pending')}</span> : <span className="helper">{t('teacher.noStudents')}</span>}</td>
               </tr>
             ))}</tbody>
           </table>

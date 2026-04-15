@@ -5,6 +5,7 @@ import { LoadingSpinner } from '@/ui/components/LoadingSpinner'
 import { FileUpload } from '@/ui/components/FileUpload'
 import { ParentMultiSelect } from '@/ui/components/ParentMultiSelect'
 import { Modal } from '@/ui/components/Modal'
+import { useLanguage } from '@/i18n/LanguageProvider'
 
 interface Conversation {
   parent_id: string
@@ -28,6 +29,7 @@ type Role = 'teacher' | 'parent' | 'school_admin'
 
 export default function Messages() {
   const { show } = useToast()
+  const { t } = useLanguage()
   const [role, setRole] = useState<Role | null>(null)
   const [userId, setUserId] = useState<string | null>(null)
   const [schoolId, setSchoolId] = useState<string | null>(null)
@@ -46,6 +48,7 @@ export default function Messages() {
   const [sending, setSending] = useState(false)
   const bottomRef = useRef<HTMLDivElement>(null)
   const [lastSentMsgId, setLastSentMsgId] = useState<string | null>(null)
+  const [messageMedia, setMessageMedia] = useState<Record<string, { url: string; name: string; mime: string }[]>>({})
 
   // New conversation
   const [showNewConvo, setShowNewConvo] = useState(false)
@@ -208,6 +211,7 @@ export default function Messages() {
   const openThread = async (convo: { parent_id: string; teacher_id: string | null; student_id: string | null }) => {
     setActiveConvo(convo)
     setLoadingThread(true)
+    setMessageMedia({})
     let query = supabase
       .from('messages')
       .select('id, text_content, sender_id, created_at')
@@ -228,6 +232,30 @@ export default function Messages() {
     setMessages(data ?? [])
     setLoadingThread(false)
     setTimeout(() => bottomRef.current?.scrollIntoView({ behavior: 'smooth' }), 100)
+
+    // Load media attachments for messages
+    const msgIds = (data ?? []).map(m => m.id)
+    if (msgIds.length > 0) {
+      const { data: media } = await supabase
+        .from('media_assets')
+        .select('message_id, object_path, mime_type')
+        .in('message_id', msgIds)
+        .is('deleted_at', null)
+
+      const byMsg: Record<string, { url: string; name: string; mime: string }[]> = {}
+      for (const m of media ?? []) {
+        const { data: signed } = await supabase.storage.from('media').createSignedUrl(m.object_path, 3600)
+        if (signed && m.message_id) {
+          if (!byMsg[m.message_id]) byMsg[m.message_id] = []
+          byMsg[m.message_id].push({
+            url: signed.signedUrl,
+            name: m.object_path.split('/').pop() || 'Attachment',
+            mime: m.mime_type || '',
+          })
+        }
+      }
+      setMessageMedia(byMsg)
+    }
   }
 
   const sendMessage = async () => {
@@ -325,8 +353,8 @@ export default function Messages() {
   if (role !== 'parent' && role !== 'teacher' && role !== 'school_admin') {
     return (
       <div className="card">
-        <h2 style={{ marginTop: 0 }}>Messages</h2>
-        <p className="helper">Messaging is available for parents and teachers.</p>
+        <h2 style={{ marginTop: 0 }}>{t('messages.title')}</h2>
+        <p className="helper">{t('messages.notAvailable')}</p>
       </div>
     )
   }
@@ -339,16 +367,16 @@ export default function Messages() {
       {/* Conversation list */}
       <div className="card" style={{ padding: 0, overflow: 'hidden', display: activeConvo ? undefined : 'block' }}>
         <div style={{ padding: '12px 16px', borderBottom: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <h3 style={{ margin: 0 }}>Conversations</h3>
+          <h3 style={{ margin: 0 }}>{t('messages.conversations')}</h3>
           <div style={{ display: 'flex', gap: 6 }}>
             {role === 'school_admin' && (
               <button className="btn btn-secondary" style={{ padding: '6px 10px', fontSize: 13 }} onClick={() => setShowBulkModal(true)}>
-                Bulk
+                {t('messages.bulk')}
               </button>
             )}
             {convoTargets.length > 0 && (
               <button className="btn btn-primary" style={{ padding: '6px 10px', fontSize: 13 }} onClick={() => setShowNewConvo(!showNewConvo)}>
-                + New
+                {t('messages.new')}
               </button>
             )}
           </div>
@@ -358,26 +386,26 @@ export default function Messages() {
           <div style={{ padding: '8px 16px', borderBottom: '1px solid var(--border)', background: 'var(--bg)' }}>
             <select value={selectedTarget} onChange={e => setSelectedTarget(e.target.value)} style={{ padding: '6px 8px', fontSize: 13, width: '100%' }}>
               <option value="">
-                {role === 'school_admin' ? 'Select parent...' : role === 'parent' ? 'Select teacher...' : 'Select parent...'}
+                {role === 'school_admin' ? t('messages.selectParent') : role === 'parent' ? t('messages.selectTeacher') : t('messages.selectParent')}
               </option>
-              {convoTargets.map(t => (
+              {convoTargets.map(ct => (
                 <option
-                  key={role === 'school_admin' ? t.id : `${t.id}-${t.student_id}`}
-                  value={role === 'school_admin' ? t.id : `${t.id}-${t.student_id}`}
+                  key={role === 'school_admin' ? ct.id : `${ct.id}-${ct.student_id}`}
+                  value={role === 'school_admin' ? ct.id : `${ct.id}-${ct.student_id}`}
                 >
-                  {t.name}{t.student_name ? ` (re: ${t.student_name})` : ''}
+                  {ct.name}{ct.student_name ? ` (re: ${ct.student_name})` : ''}
                 </option>
               ))}
             </select>
             <button className="btn btn-primary" style={{ padding: '6px 10px', fontSize: 13, marginTop: 6 }} onClick={startNewConversation} disabled={!selectedTarget}>
-              Start Chat
+              {t('messages.startChat')}
             </button>
           </div>
         )}
 
         {conversations.length === 0 && !showNewConvo ? (
           <div style={{ padding: 24, textAlign: 'center', color: 'var(--muted)' }}>
-            No conversations yet.{convoTargets.length > 0 && ' Click + New to start one.'}
+            {t('messages.noConversations')}{convoTargets.length > 0 && ' Click + New to start one.'}
           </div>
         ) : (
           <div>
@@ -398,13 +426,13 @@ export default function Messages() {
                   <div style={{ fontWeight: 500, display: 'flex', alignItems: 'center', gap: 6 }}>
                     {c.other_name}
                     {c.is_admin_convo && role === 'school_admin' && (
-                      <span className="badge badge-info" style={{ fontSize: 10 }}>Direct</span>
+                      <span className="badge badge-info" style={{ fontSize: 10 }}>{t('messages.direct')}</span>
                     )}
                     {c.is_admin_convo && role === 'parent' && (
-                      <span className="badge badge-info" style={{ fontSize: 10 }}>Admin</span>
+                      <span className="badge badge-info" style={{ fontSize: 10 }}>{t('messages.admin')}</span>
                     )}
                     {!c.is_admin_convo && role === 'school_admin' && (
-                      <span className="badge" style={{ fontSize: 10 }}>View only</span>
+                      <span className="badge" style={{ fontSize: 10 }}>{t('messages.viewOnly')}</span>
                     )}
                   </div>
                   {c.student_name && <div className="helper" style={{ fontSize: 11 }}>re: {c.student_name}</div>}
@@ -431,7 +459,7 @@ export default function Messages() {
                 {conversations.find(c => convoKey(c) === convoKey(activeConvo))?.student_name}
               </span>
             </div>
-            <button className="btn btn-ghost" style={{ padding: '4px 8px', fontSize: 13 }} onClick={() => setActiveConvo(null)}>Close</button>
+            <button className="btn btn-ghost" style={{ padding: '4px 8px', fontSize: 13 }} onClick={() => setActiveConvo(null)}>{t('common.close')}</button>
           </div>
 
           {/* Messages */}
@@ -439,7 +467,7 @@ export default function Messages() {
             {loadingThread ? (
               <div style={{ textAlign: 'center', padding: 24 }}><LoadingSpinner size="md" /></div>
             ) : messages.length === 0 ? (
-              <div style={{ textAlign: 'center', color: 'var(--muted)', padding: 24 }}>No messages yet. Send the first one!</div>
+              <div style={{ textAlign: 'center', color: 'var(--muted)', padding: 24 }}>{t('messages.noMessages')}</div>
             ) : (
               messages.map(m => {
                 const isMine = m.sender_id === userId
@@ -454,6 +482,27 @@ export default function Messages() {
                       border: isMine ? 'none' : '1px solid var(--border)',
                     }}>
                       <div style={{ fontSize: 14 }}>{m.text_content}</div>
+                      {messageMedia[m.id]?.map((att, i) => (
+                        <div key={i} style={{ marginTop: 6 }}>
+                          {att.mime.startsWith('image/') ? (
+                            <img
+                              src={att.url}
+                              alt={att.name}
+                              style={{ maxWidth: 200, maxHeight: 160, borderRadius: 8, cursor: 'pointer', display: 'block' }}
+                              onClick={() => window.open(att.url, '_blank')}
+                            />
+                          ) : (
+                            <a
+                              href={att.url}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              style={{ color: isMine ? '#dbeafe' : 'var(--primary)', fontSize: 13, textDecoration: 'underline' }}
+                            >
+                              {att.name}
+                            </a>
+                          )}
+                        </div>
+                      ))}
                       <div style={{ fontSize: 11, opacity: 0.7, marginTop: 2, textAlign: 'right' }}>
                         {new Date(m.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                       </div>
@@ -473,11 +522,11 @@ export default function Messages() {
                   value={newMsg}
                   onChange={e => setNewMsg(e.target.value)}
                   onKeyDown={e => e.key === 'Enter' && !e.shiftKey && sendMessage()}
-                  placeholder="Type a message..."
+                  placeholder={t('messages.placeholder')}
                   style={{ flex: 1, padding: '8px 12px' }}
                 />
                 <button className="btn btn-primary" onClick={sendMessage} disabled={sending || !newMsg.trim()}>
-                  {sending ? <LoadingSpinner size="sm" /> : 'Send'}
+                  {sending ? <LoadingSpinner size="sm" /> : t('messages.send')}
                 </button>
               </div>
               {lastSentMsgId && schoolId && userId && (
@@ -488,7 +537,7 @@ export default function Messages() {
                     folder="messages"
                     associationField="message_id"
                     associationId={lastSentMsgId}
-                    onUploadComplete={() => { show('File attached', 'success'); setLastSentMsgId(null) }}
+                    onUploadComplete={() => { show(t('messages.fileAttached'), 'success'); setLastSentMsgId(null); if (activeConvo) openThread(activeConvo) }}
                     onError={(msg) => show(msg, 'error')}
                     compact
                   />
@@ -497,17 +546,17 @@ export default function Messages() {
             </div>
           ) : (
             <div style={{ padding: '8px 16px', borderTop: '1px solid var(--border)', textAlign: 'center' }}>
-              <span className="helper">Read-only view \u2014 this is a teacher-parent conversation</span>
+              <span className="helper">{t('messages.readOnly')}</span>
             </div>
           )}
         </div>
       )}
       {/* Bulk message modal (admin only) */}
       {showBulkModal && schoolId && (
-        <Modal open={showBulkModal} onClose={() => setShowBulkModal(false)} title="Message Multiple Parents" wide>
+        <Modal open={showBulkModal} onClose={() => setShowBulkModal(false)} title={t('messages.bulkTitle')} wide>
           <div style={{ display: 'grid', gap: 16 }}>
             <div>
-              <label className="helper" style={{ marginBottom: 6, display: 'block' }}>Select Parents</label>
+              <label className="helper" style={{ marginBottom: 6, display: 'block' }}>{t('messages.bulkSelectParents')}</label>
               <ParentMultiSelect
                 schoolId={schoolId}
                 selectedParentIds={bulkParents}
@@ -515,12 +564,12 @@ export default function Messages() {
               />
             </div>
             <div>
-              <label className="helper" style={{ marginBottom: 6, display: 'block' }}>Message</label>
+              <label className="helper" style={{ marginBottom: 6, display: 'block' }}>{t('messages.bulkMessage')}</label>
               <textarea
                 value={bulkText}
                 onChange={e => setBulkText(e.target.value)}
                 rows={4}
-                placeholder="Type your message to all selected parents..."
+                placeholder={t('messages.bulkPlaceholder')}
                 style={{ width: '100%' }}
               />
             </div>
@@ -532,7 +581,7 @@ export default function Messages() {
               >
                 {bulkSending ? <><LoadingSpinner size="sm" /> Sending...</> : `Send to ${bulkParents.length} parent${bulkParents.length !== 1 ? 's' : ''}`}
               </button>
-              <button className="btn btn-secondary" onClick={() => setShowBulkModal(false)}>Cancel</button>
+              <button className="btn btn-secondary" onClick={() => setShowBulkModal(false)}>{t('common.cancel')}</button>
             </div>
           </div>
         </Modal>

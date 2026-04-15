@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { supabase } from '@/lib/supabaseClient'
 import { CalendarCheck, MessageCircle, BookOpen, Bell } from 'lucide-react'
+import { useLanguage } from '@/i18n/LanguageProvider'
 
 interface Child {
   student_id: string
@@ -27,6 +28,7 @@ interface AnnouncementPreview {
   class_name: string | null
   created_at: string
   is_new: boolean
+  media_url: string | null
 }
 
 interface ProgressPreview {
@@ -35,9 +37,11 @@ interface ProgressPreview {
   term_label: string
   summary: string | null
   metrics: Record<string, number> | null
+  media_url: string | null
 }
 
 export default function ParentDashboard() {
+  const { t } = useLanguage()
   const [loading, setLoading] = useState(true)
   const [children, setChildren] = useState<Child[]>([])
   const [recentUpdates, setRecentUpdates] = useState<UpdatePreview[]>([])
@@ -163,13 +167,33 @@ export default function ParentDashboard() {
           .order('created_at', { ascending: false })
           .limit(4)
 
-        setProgressReports((reports ?? []).map((r: any) => ({
+        const reportList: ProgressPreview[] = (reports ?? []).map((r: any) => ({
           id: r.id,
           student_name: r.students ? `${r.students.first_name} ${r.students.last_name}` : 'Unknown',
           term_label: r.term_label,
           summary: r.summary,
           metrics: r.metrics,
-        })))
+          media_url: null,
+        }))
+
+        // Load media for reports
+        const reportIds = reportList.map(r => r.id)
+        if (reportIds.length > 0) {
+          const { data: reportMedia } = await supabase
+            .from('media_assets')
+            .select('progress_report_id, object_path')
+            .in('progress_report_id', reportIds)
+            .is('deleted_at', null)
+          for (const m of reportMedia ?? []) {
+            const { data: signed } = await supabase.storage.from('media').createSignedUrl(m.object_path, 3600)
+            if (signed && m.progress_report_id) {
+              const rpt = reportList.find(r => r.id === m.progress_report_id)
+              if (rpt) rpt.media_url = signed.signedUrl
+            }
+          }
+        }
+
+        setProgressReports(reportList)
       }
 
       // Announcements (with body)
@@ -181,14 +205,34 @@ export default function ParentDashboard() {
           .is('deleted_at', null)
           .order('created_at', { ascending: false })
           .limit(3)
-        setAnnouncements((annData ?? []).map((a: any) => ({
+        const annList: AnnouncementPreview[] = (annData ?? []).map((a: any) => ({
           id: a.id,
           title: a.title,
           body: a.body,
           class_name: a.classes?.name ?? null,
           created_at: a.created_at,
           is_new: new Date(a.created_at).getTime() > Date.now() - 24 * 60 * 60 * 1000,
-        })))
+          media_url: null,
+        }))
+
+        // Load media for announcements
+        const annIds = annList.map(a => a.id)
+        if (annIds.length > 0) {
+          const { data: annMedia } = await supabase
+            .from('media_assets')
+            .select('announcement_id, object_path')
+            .in('announcement_id', annIds)
+            .is('deleted_at', null)
+          for (const m of annMedia ?? []) {
+            const { data: signed } = await supabase.storage.from('media').createSignedUrl(m.object_path, 3600)
+            if (signed && m.announcement_id) {
+              const ann = annList.find(a => a.id === m.announcement_id)
+              if (ann) ann.media_url = signed.signedUrl
+            }
+          }
+        }
+
+        setAnnouncements(annList)
       }
 
       setLoading(false)
@@ -201,10 +245,10 @@ export default function ParentDashboard() {
   }
 
   const statusBadge = (status: string | null) => {
-    if (!status) return <span className="badge">Not recorded</span>
-    if (status === 'present') return <span className="badge badge-success">Present</span>
-    if (status === 'absent') return <span className="badge" style={{ color: '#dc2626', background: '#fef2f2', borderColor: '#fecaca' }}>Absent</span>
-    if (status === 'late') return <span className="badge badge-warning">Late</span>
+    if (!status) return <span className="badge">{t('parent.notRecorded')}</span>
+    if (status === 'present') return <span className="badge badge-success">{t('parent.present')}</span>
+    if (status === 'absent') return <span className="badge" style={{ color: '#dc2626', background: '#fef2f2', borderColor: '#fecaca' }}>{t('parent.absent')}</span>
+    if (status === 'late') return <span className="badge badge-warning">{t('parent.late')}</span>
     return <span className="badge">{status}</span>
   }
 
@@ -225,23 +269,23 @@ export default function ParentDashboard() {
   return (
     <div style={{ display: 'grid', gap: 16 }}>
       <div className="dash-header">
-        <h2>Parent Dashboard</h2>
-        <p>Stay connected with your children's education</p>
+        <h2>{t('parent.title')}</h2>
+        <p>{t('parent.subtitle')}</p>
       </div>
 
       {/* My Children */}
       <div className="chart-card">
-        <h3>My Children</h3>
+        <h3>{t('parent.myChildren')}</h3>
         {children.length === 0 ? (
-          <div className="empty" style={{ padding: 16 }}>No children linked to your account.</div>
+          <div className="empty" style={{ padding: 16 }}>{t('parent.noChildren')}</div>
         ) : (
           <div className="grid cols-2" style={{ gap: 10 }}>
             {children.map(c => (
               <div key={c.student_id} className="card" style={{ padding: 16 }}>
                 <div style={{ fontWeight: 600, fontSize: 16 }}>{c.first_name} {c.last_name}</div>
-                <div className="helper" style={{ marginTop: 4 }}>{c.class_name ?? 'Not enrolled'}</div>
+                <div className="helper" style={{ marginTop: 4 }}>{c.class_name ?? t('parent.notEnrolled')}</div>
                 <div style={{ marginTop: 8 }}>
-                  <span className="helper" style={{ marginRight: 8 }}>Today:</span>
+                  <span className="helper" style={{ marginRight: 8 }}>{t('parent.today')}:</span>
                   {statusBadge(c.attendance_status)}
                 </div>
               </div>
@@ -254,11 +298,11 @@ export default function ParentDashboard() {
       <div className="grid cols-3 quick-actions">
         <Link to="/app/attendance" className="quick-action">
           <div className="quick-action-icon" style={{ background: '#22c55e' }}><CalendarCheck size={20} /></div>
-          <div><h4>Attendance</h4><p>View history</p></div>
+          <div><h4>{t('parent.viewAttendance')}</h4><p>{t('parent.viewAttendanceDesc')}</p></div>
         </Link>
         <Link to="/app/messages" className="quick-action" style={{ position: 'relative' }}>
           <div className="quick-action-icon" style={{ background: '#3b82f6' }}><MessageCircle size={20} /></div>
-          <div><h4>Messages</h4><p>Chat with teachers</p></div>
+          <div><h4>{t('parent.viewMessages')}</h4><p>{t('parent.viewMessagesDesc')}</p></div>
           {unreadCount > 0 && (
             <span className="badge badge-warning" style={{ position: 'absolute', top: 8, right: 8, fontSize: 11 }}>
               {unreadCount} new
@@ -267,14 +311,14 @@ export default function ParentDashboard() {
         </Link>
         <Link to="/app/reports" className="quick-action">
           <div className="quick-action-icon" style={{ background: '#8b5cf6' }}><BookOpen size={20} /></div>
-          <div><h4>Reports</h4><p>Progress reports</p></div>
+          <div><h4>{t('parent.viewReports')}</h4><p>{t('parent.viewReportsDesc')}</p></div>
         </Link>
       </div>
 
       {/* Media Gallery */}
       {mediaGallery.length > 0 && (
         <div className="card">
-          <h3 >Recent Photos</h3>
+          <h3 >{t('parent.recentPhotos')}</h3>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(120px, 1fr))', gap: 8 }}>
             {mediaGallery.map((m, i) => (
               <div key={i} style={{ borderRadius: 8, overflow: 'hidden', aspectRatio: '1', border: '1px solid var(--border)' }}>
@@ -288,7 +332,7 @@ export default function ParentDashboard() {
             ))}
           </div>
           <div style={{ marginTop: 8 }}>
-            <Link to="/app/updates" style={{ color: 'var(--primary)', fontSize: 14 }}>View all updates</Link>
+            <Link to="/app/updates" style={{ color: 'var(--primary)', fontSize: 14 }}>{t('parent.viewAllUpdates')}</Link>
           </div>
         </div>
       )}
@@ -296,7 +340,7 @@ export default function ParentDashboard() {
       {/* Progress Reports */}
       {progressReports.length > 0 && (
         <div className="card">
-          <h3 >Latest Progress Reports</h3>
+          <h3 >{t('parent.latestReports')}</h3>
           <div className="grid cols-2" style={{ gap: 10 }}>
             {progressReports.map(r => (
               <div key={r.id} className="card" style={{ padding: 14 }}>
@@ -312,11 +356,22 @@ export default function ParentDashboard() {
                     ))}
                   </div>
                 )}
+                {r.media_url && (
+                  <div style={{ marginTop: 8 }}>
+                    <img
+                      src={r.media_url}
+                      alt="Report attachment"
+                      style={{ maxWidth: '100%', maxHeight: 120, borderRadius: 8, cursor: 'pointer', border: '1px solid var(--border)' }}
+                      onClick={() => window.open(r.media_url!, '_blank')}
+                      onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none' }}
+                    />
+                  </div>
+                )}
               </div>
             ))}
           </div>
           <div style={{ marginTop: 8 }}>
-            <Link to="/app/reports" style={{ color: 'var(--primary)', fontSize: 14 }}>View all reports</Link>
+            <Link to="/app/reports" style={{ color: 'var(--primary)', fontSize: 14 }}>{t('parent.viewAllReports')}</Link>
           </div>
         </div>
       )}
@@ -324,7 +379,7 @@ export default function ParentDashboard() {
       {/* Recent Updates */}
       {recentUpdates.length > 0 && (
         <div className="card">
-          <h3 >Recent Class Updates</h3>
+          <h3 >{t('parent.recentUpdates')}</h3>
           <ul style={{ listStyle: 'none', padding: 0, margin: 0, display: 'grid', gap: 8 }}>
             {recentUpdates.map(u => (
               <li key={u.id} style={{ padding: '8px 0', borderBottom: '1px solid var(--border)' }}>
@@ -343,7 +398,7 @@ export default function ParentDashboard() {
                     style={{ padding: 0, fontSize: 13, color: 'var(--primary)', marginTop: 2 }}
                     onClick={() => toggleExpand(u.id)}
                   >
-                    {u.expanded ? 'Show less' : 'Read more'}
+                    {u.expanded ? t('parent.showLess') : t('parent.readMore')}
                   </button>
                 )}
                 {u.media_url && (
@@ -360,7 +415,7 @@ export default function ParentDashboard() {
             ))}
           </ul>
           <div style={{ marginTop: 8 }}>
-            <Link to="/app/updates" style={{ color: 'var(--primary)', fontSize: 14 }}>View all updates</Link>
+            <Link to="/app/updates" style={{ color: 'var(--primary)', fontSize: 14 }}>{t('parent.viewAllUpdates')}</Link>
           </div>
         </div>
       )}
@@ -368,12 +423,12 @@ export default function ParentDashboard() {
       {/* Announcements */}
       {announcements.length > 0 && (
         <div className="card">
-          <h3 >Latest Announcements</h3>
+          <h3 >{t('parent.latestAnnouncements')}</h3>
           {announcements.map(a => (
             <div key={a.id} style={{ padding: '10px 0', borderBottom: '1px solid var(--border)' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                 <span style={{ fontWeight: 500 }}>{a.title}</span>
-                {a.is_new && <span className="badge badge-warning" style={{ fontSize: 10 }}>New</span>}
+                {a.is_new && <span className="badge badge-warning" style={{ fontSize: 10 }}>{t('parent.new')}</span>}
                 {a.class_name && <span className="badge badge-info" style={{ fontSize: 10 }}>{a.class_name}</span>}
               </div>
               {a.body && (
@@ -381,11 +436,21 @@ export default function ParentDashboard() {
                   {a.body.length > 150 ? a.body.slice(0, 150) + '...' : a.body}
                 </p>
               )}
+              {a.media_url && (
+                <div style={{ marginTop: 6 }}>
+                  <img
+                    src={a.media_url}
+                    alt="Attachment"
+                    style={{ maxWidth: '100%', maxHeight: 150, borderRadius: 8, border: '1px solid var(--border)' }}
+                    onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none' }}
+                  />
+                </div>
+              )}
               <div className="helper" style={{ fontSize: 11, marginTop: 2 }}>{new Date(a.created_at).toLocaleDateString()}</div>
             </div>
           ))}
           <div style={{ marginTop: 8 }}>
-            <Link to="/app/announcements" style={{ color: 'var(--primary)', fontSize: 14 }}>View all announcements</Link>
+            <Link to="/app/announcements" style={{ color: 'var(--primary)', fontSize: 14 }}>{t('parent.viewAllAnnouncements')}</Link>
           </div>
         </div>
       )}

@@ -3,6 +3,7 @@ import * as XLSX from 'xlsx'
 import { supabase } from '@/lib/supabaseClient'
 import { useToast } from '@/ui/components/toast/ToastProvider'
 import { LoadingSpinner } from '@/ui/components/LoadingSpinner'
+import { useLanguage } from '@/i18n/LanguageProvider'
 
 type Tab = 'students' | 'classes'
 type ImportStep = 'upload' | 'preview' | 'importing' | 'done'
@@ -14,6 +15,7 @@ const CLASS_COLUMNS = ['name', 'grade_level', 'teacher_name']
 
 export default function BulkImport() {
   const { show } = useToast()
+  const { t } = useLanguage()
   const [role, setRole] = useState<string | null>(null)
   const [schoolId, setSchoolId] = useState<string | null>(null)
   const [tab, setTab] = useState<Tab>('students')
@@ -200,8 +202,8 @@ export default function BulkImport() {
   if (role !== 'school_admin') {
     return (
       <div className="card">
-        <h2 style={{ marginTop: 0 }}>Bulk Import</h2>
-        <p className="helper">Only school administrators can import data.</p>
+        <h2 style={{ marginTop: 0 }}>{t('import.title')}</h2>
+        <p className="helper">{t('import.adminOnly')}</p>
       </div>
     )
   }
@@ -209,14 +211,14 @@ export default function BulkImport() {
   return (
     <div className="grid" style={{ gap: 16 }}>
       <div className="card">
-        <h2 style={{ marginTop: 0 }}>Bulk Import</h2>
-        <p className="helper" style={{ marginBottom: 12 }}>Upload an Excel or CSV file to import multiple records at once.</p>
+        <h2 style={{ marginTop: 0 }}>{t('import.title')}</h2>
+        <p className="helper" style={{ marginBottom: 12 }}>{t('import.subtitle')}</p>
 
         {/* Tabs */}
         <div className="tab-bar">
-          {(['students', 'classes'] as Tab[]).map(t => (
-            <button key={t} className={`tab-btn ${tab === t ? 'active' : ''}`} onClick={() => { setTab(t); reset() }}>
-              {t.charAt(0).toUpperCase() + t.slice(1)}
+          {(['students', 'classes'] as Tab[]).map(tb => (
+            <button key={tb} className={`tab-btn ${tab === tb ? 'active' : ''}`} onClick={() => { setTab(tb); reset() }}>
+              {tb === 'students' ? t('import.students') : t('import.classes')}
             </button>
           ))}
         </div>
@@ -232,25 +234,25 @@ export default function BulkImport() {
               onClick={() => document.getElementById('file-input')?.click()}
             >
               <p style={{ fontSize: 16, fontWeight: 600, margin: '0 0 8px 0' }}>
-                Drop your {tab === 'students' ? 'student' : 'class'} file here
+                {t('import.dropFile')}
               </p>
-              <p className="helper">or click to browse (.xlsx, .csv)</p>
+              <p className="helper">{t('import.orBrowse')}</p>
               <input id="file-input" type="file" accept=".xlsx,.xls,.csv" onChange={handleFile} style={{ display: 'none' }} />
             </div>
             <div style={{ marginTop: 12, display: 'flex', gap: 8, alignItems: 'center' }}>
-              <button className="btn btn-secondary" onClick={downloadTemplate}>Download Template</button>
-              <span className="helper">Get a pre-formatted Excel template with the right column headers</span>
+              <button className="btn btn-secondary" onClick={downloadTemplate}>{t('import.downloadTemplate')}</button>
+              <span className="helper">{t('import.templateDesc')}</span>
             </div>
             <div style={{ marginTop: 12 }}>
               <p className="helper" style={{ margin: 0 }}>
-                <strong>Expected columns:</strong> {columns.map((c, i) => (
+                <strong>{t('import.expectedColumns')}</strong> {columns.map((c, i) => (
                   <span key={c}>{i > 0 && ', '}<code style={{ background: 'var(--bg)', padding: '1px 4px', borderRadius: 4 }}>{c}</code>
                   {(tab === 'students' && (c === 'first_name' || c === 'last_name')) || (tab === 'classes' && c === 'name') ? ' *' : ''}</span>
                 ))}
               </p>
               {tab === 'students' && (
                 <p className="helper" style={{ margin: '4px 0 0 0' }}>
-                  Tip: If you include <code style={{ background: 'var(--bg)', padding: '1px 4px', borderRadius: 4 }}>class_name</code>, students will be auto-enrolled into matching classes.
+                  {t('import.tip')}
                 </p>
               )}
             </div>
@@ -262,11 +264,11 @@ export default function BulkImport() {
           <>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
               <div>
-                <strong>{rows.length} rows</strong> found
-                {errors.length > 0 && <span style={{ color: '#dc2626', marginLeft: 8 }}>{errors.length} validation errors</span>}
+                <strong>{rows.length} {t('import.rowsFound')}</strong>
+                {errors.length > 0 && <span style={{ color: '#dc2626', marginLeft: 8 }}>{errors.length} {t('import.validationErrors')}</span>}
               </div>
               <div style={{ display: 'flex', gap: 8 }}>
-                <button className="btn btn-secondary" onClick={reset}>Back</button>
+                <button className="btn btn-secondary" onClick={reset}>{t('common.back')}</button>
                 <button
                   className="btn btn-primary"
                   onClick={tab === 'students' ? importStudents : importClasses}
@@ -327,12 +329,12 @@ export default function BulkImport() {
         {step === 'done' && result && (
           <div style={{ textAlign: 'center', padding: 40 }}>
             <div style={{ fontSize: 48, marginBottom: 8 }}>{result.failed === 0 ? '✓' : '⚠'}</div>
-            <h3 style={{ margin: '0 0 8px 0' }}>Import Complete</h3>
+            <h3 style={{ margin: '0 0 8px 0' }}>{t('import.complete')}</h3>
             <p>
-              <span className="badge badge-success" style={{ marginRight: 8 }}>{result.success} imported</span>
-              {result.failed > 0 && <span className="badge" style={{ color: '#dc2626', background: '#fef2f2', borderColor: '#fecaca' }}>{result.failed} failed</span>}
+              <span className="badge badge-success" style={{ marginRight: 8 }}>{result.success} {t('import.imported')}</span>
+              {result.failed > 0 && <span className="badge" style={{ color: '#dc2626', background: '#fef2f2', borderColor: '#fecaca' }}>{result.failed} {t('import.failed')}</span>}
             </p>
-            <button className="btn btn-primary" onClick={reset} style={{ marginTop: 12 }}>Import More</button>
+            <button className="btn btn-primary" onClick={reset} style={{ marginTop: 12 }}>{t('import.importMore')}</button>
           </div>
         )}
       </div>

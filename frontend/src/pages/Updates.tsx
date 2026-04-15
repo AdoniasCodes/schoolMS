@@ -3,11 +3,13 @@ import { supabase } from '@/lib/supabaseClient'
 import { useToast } from '@/ui/components/toast/ToastProvider'
 import { LoadingSpinner } from '@/ui/components/LoadingSpinner'
 import { FileUpload } from '@/ui/components/FileUpload'
+import { useLanguage } from '@/i18n/LanguageProvider'
 
 interface ClassRow { id: string; name: string }
 interface UpdateRow { id: string; class_id: string; teacher_id: string; text_content: string | null; created_at: string }
 
 export default function Updates() {
+  const { t } = useLanguage()
   const [role, setRole] = useState<'teacher' | 'parent' | 'school_admin' | null>(null)
   const [schoolId, setSchoolId] = useState<string>('')
   const [userId, setUserId] = useState<string>('')
@@ -152,20 +154,20 @@ export default function Updates() {
 
   return (
     <div>
-      <h2>Daily Updates</h2>
+      <h2>{t('updates.title')}</h2>
 
       {canPost && (
         <div style={{ border: '1px solid #ddd', padding: 12, borderRadius: 8, marginBottom: 16 }}>
-          <h3>Create Update</h3>
+          <h3>{t('updates.create')}</h3>
           <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 8 }}>
             <label htmlFor="classSel" className="helper">Class</label>
             <select id="classSel" aria-label="Select class for update" value={selectedClass} onChange={(e) => { setSelectedClass(e.target.value); setPage(0) }}>
-              <option value="">Select class</option>
+              <option value="">{t('updates.selectClass')}</option>
               {classes.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
             </select>
           </div>
           <textarea
-            placeholder="Share today's update..."
+            placeholder={t('updates.placeholder')}
             value={text}
             onChange={(e) => setText(e.target.value)}
             rows={3}
@@ -178,12 +180,12 @@ export default function Updates() {
               disabled={posting || !selectedClass || !text.trim()}
               style={{ minWidth: 100, display: 'inline-flex', justifyContent: 'center', gap: '0.5rem' }}
             >
-              {posting ? <><LoadingSpinner size="sm" /> Posting...</> : 'Post'}
+              {posting ? <><LoadingSpinner size="sm" /> {t('common.posting')}</> : t('updates.post')}
             </button>
           </div>
           {pendingUpdateId && (
             <div style={{ marginTop: 12 }}>
-              <label style={{ fontSize: 13, color: 'var(--muted)', marginBottom: 4, display: 'block' }}>Attach media to this update:</label>
+              <label style={{ fontSize: 13, color: 'var(--muted)', marginBottom: 4, display: 'block' }}>{t('updates.attachMedia')}</label>
               <FileUpload
                 schoolId={schoolId}
                 uploadedBy={userId}
@@ -200,7 +202,7 @@ export default function Updates() {
       )}
 
       <div>
-        <h3>Feed</h3>
+        <h3>{t('updates.feed')}</h3>
         {loadingFeed ? (
           <ul style={{ listStyle: 'none', padding: 0, display: 'grid', gap: 8 }}>
             {Array.from({ length: 5 }).map((_, i) => (
@@ -214,7 +216,7 @@ export default function Updates() {
         ) : feedError ? (
           <p className="helper" role="status" style={{ color: 'var(--danger)' }}>{feedError}</p>
         ) : feed.length === 0 ? (
-          <p>No updates for this class.</p>
+          <p>{t('updates.noUpdates')}</p>
         ) : (
           <ul style={{ listStyle: 'none', padding: 0, display: 'grid', gap: 8 }}>
             {feed.map((u) => (
@@ -250,7 +252,7 @@ export default function Updates() {
                           link.href = mediaMap[u.id]?.url || '#';
                           link.target = '_blank';
                           link.rel = 'noopener noreferrer';
-                          link.textContent = 'View media';
+                          link.textContent = t('updates.viewMedia');
                           link.style.display = 'inline-block';
                           link.style.marginTop = '0.5rem';
                           link.style.color = 'var(--primary)';
@@ -268,8 +270,8 @@ export default function Updates() {
           </ul>
         )}
         <div style={{ display:'flex', gap:8, marginTop:8 }}>
-          <button className="btn btn-secondary" onClick={() => setPage(p => Math.max(0, p-1))} disabled={page===0} aria-label="Previous page">Prev</button>
-          <button className="btn btn-secondary" onClick={() => setPage(p => p+1)} aria-label="Next page">Next</button>
+          <button className="btn btn-secondary" onClick={() => setPage(p => Math.max(0, p-1))} disabled={page===0} aria-label="Previous page">{t('updates.prev')}</button>
+          <button className="btn btn-secondary" onClick={() => setPage(p => p+1)} aria-label="Next page">{t('updates.next')}</button>
         </div>
       </div>
     </div>

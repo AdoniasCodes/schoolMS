@@ -624,3 +624,13 @@ hr{ border:0; border-top:1px solid var(--border); margin:16px 0 }
 .lp .offcanvas-panel a { text-decoration:none; color: var(--lp-text); padding:10px 8px; border-radius:10px; font-weight: 600; font-size: 15px; }
 .lp .offcanvas-backdrop { position:absolute; inset:0; background: rgba(26,58,74,.35); opacity:0; transition: opacity .25s ease }
 .lp .offcanvas.open .offcanvas-backdrop { opacity: 1 }
+
+/* Print styles for Report Cards */
+@media print {
+  .sidebar, .sidebar-desktop, .topbar, .mobile-hamburger, .no-print, .mobile-overlay, .skip-link { display: none !important; }
+  .app-shell { display: block !important; }
+  .content { margin: 0 !important; padding: 0 !important; max-width: 100% !important; }
+  .report-card { break-inside: avoid; page-break-after: always; box-shadow: none !important; border: 1px solid #ccc !important; }
+  .report-card:last-child { page-break-after: auto; }
+  body { background: #fff !important; }
+}

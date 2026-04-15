@@ -1,9 +1,11 @@
 import { useState } from 'react'
 import { useNavigate, useLocation, Link } from 'react-router-dom'
 import { supabase } from '@/lib/supabaseClient'
+import { useLanguage } from '@/i18n/LanguageProvider'
 import { ArrowRight, Mail, Lock, Sparkles } from 'lucide-react'
 
 export default function Login() {
+  const { t } = useLanguage()
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [loading, setLoading] = useState(false)
@@ -34,7 +36,7 @@ export default function Login() {
       options: { emailRedirectTo: `${window.location.origin}/app` }
     })
     if (error) setMessage({ text: error.message, type: 'error' })
-    else setMessage({ text: 'Check your email for the login link!', type: 'success' })
+    else setMessage({ text: t('login.checkEmail'), type: 'success' })
     setLoading(false)
   }
 
@@ -44,14 +46,14 @@ export default function Login() {
       <div className="login-visual">
         <div className="login-visual-content">
           <img src="/images/logo.webp" alt="Abogida" style={{ width: 120, borderRadius: 12, marginBottom: 32 }} />
-          <h1>Welcome back to Abogida</h1>
-          <p>Where every child's journey is seen. Connect with your school community in real time.</p>
+          <h1>{t('login.welcome')}</h1>
+          <p>{t('login.subtitle')}</p>
           <div className="login-features">
             {[
-              'Real-time attendance tracking',
-              'Daily classroom photo updates',
-              'Direct parent-teacher messaging',
-              'Progress reports & analytics',
+              t('login.feature1'),
+              t('login.feature2'),
+              t('login.feature3'),
+              t('login.feature4'),
             ].map((f, i) => (
               <div key={i} className="login-feature-item">
                 <div className="login-feature-dot" />
@@ -62,7 +64,7 @@ export default function Login() {
         </div>
         <div className="login-visual-footer">
           <Link to="/" style={{ color: 'rgba(255,255,255,0.7)', textDecoration: 'none', fontSize: 14 }}>
-            &larr; Back to homepage
+            &larr; {t('login.backHome')}
           </Link>
         </div>
       </div>
@@ -71,8 +73,8 @@ export default function Login() {
       <div className="login-form-panel">
         <div className="login-form-container">
           <div className="login-form-header">
-            <h2>Sign in</h2>
-            <p>Enter your credentials to access your dashboard</p>
+            <h2>{t('login.signIn')}</h2>
+            <p>{t('login.signInDesc')}</p>
           </div>
 
           {/* Mode tabs */}
@@ -81,25 +83,25 @@ export default function Login() {
               className={`login-tab ${mode === 'password' ? 'active' : ''}`}
               onClick={() => setMode('password')}
             >
-              <Lock size={14} /> Password
+              <Lock size={14} /> {t('login.password')}
             </button>
             <button
               className={`login-tab ${mode === 'magic' ? 'active' : ''}`}
               onClick={() => setMode('magic')}
             >
-              <Sparkles size={14} /> Magic Link
+              <Sparkles size={14} /> {t('login.magicLink')}
             </button>
           </div>
 
           <form className="login-form" onSubmit={mode === 'password' ? signIn : magicLink}>
             <div className="login-field">
-              <label htmlFor="email">Email address</label>
+              <label htmlFor="email">{t('login.email')}</label>
               <div className="login-input-wrap">
                 <Mail size={16} className="login-input-icon" />
                 <input
                   id="email"
                   type="email"
-                  placeholder="name@school.com"
+                  placeholder={t('login.emailPlaceholder')}
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   required
@@ -110,13 +112,13 @@ export default function Login() {
 
             {mode === 'password' && (
               <div className="login-field">
-                <label htmlFor="password">Password</label>
+                <label htmlFor="password">{t('login.password')}</label>
                 <div className="login-input-wrap">
                   <Lock size={16} className="login-input-icon" />
                   <input
                     id="password"
                     type="password"
-                    placeholder="Enter your password"
+                    placeholder={t('login.passwordPlaceholder')}
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
                     autoComplete="current-password"
@@ -130,7 +132,7 @@ export default function Login() {
                 <span className="login-spinner" />
               ) : (
                 <>
-                  {mode === 'password' ? 'Sign In' : 'Send Magic Link'}
+                  {mode === 'password' ? t('login.signInBtn') : t('login.sendMagicLink')}
                   <ArrowRight size={16} />
                 </>
               )}
@@ -145,8 +147,8 @@ export default function Login() {
 
           <div className="login-footer-text">
             {mode === 'password'
-              ? "Don't remember your password? Switch to Magic Link."
-              : "We'll email you a secure link to sign in instantly."
+              ? t('login.forgotPassword')
+              : t('login.magicLinkHint')
             }
           </div>
         </div>

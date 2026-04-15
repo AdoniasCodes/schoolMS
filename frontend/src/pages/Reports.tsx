@@ -2,9 +2,13 @@ import { useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabaseClient'
 import { useToast } from '@/ui/components/toast/ToastProvider'
 import { LoadingSpinner } from '@/ui/components/LoadingSpinner'
+import { FileUpload } from '@/ui/components/FileUpload'
+import { Paperclip } from 'lucide-react'
+import { useLanguage } from '@/i18n/LanguageProvider'
 
 interface ClassOption { id: string; name: string }
 interface StudentOption { id: string; first_name: string; last_name: string }
+interface MediaItem { url: string; name: string; mime: string }
 interface Report {
   id: string
   term_label: string
@@ -31,6 +35,7 @@ const levelColor = (level: string) => {
 
 export default function Reports() {
   const { show } = useToast()
+  const { t } = useLanguage()
   const [role, setRole] = useState<Role | null>(null)
   const [schoolId, setSchoolId] = useState<string | null>(null)
   const [teacherId, setTeacherId] = useState<string | null>(null)
@@ -53,11 +58,40 @@ export default function Reports() {
   const [formMetrics, setFormMetrics] = useState<Record<string, string>>({})
   const [saving, setSaving] = useState(false)
 
+  // File upload + media
+  const [userId, setUserId] = useState<string | null>(null)
+  const [lastReportId, setLastReportId] = useState<string | null>(null)
+  const [mediaMap, setMediaMap] = useState<Record<string, MediaItem[]>>({})
+
+  const loadMediaForReports = async (reportIds: string[]) => {
+    if (reportIds.length === 0) { setMediaMap({}); return }
+    const { data: media } = await supabase
+      .from('media_assets')
+      .select('progress_report_id, object_path, mime_type')
+      .in('progress_report_id', reportIds)
+      .is('deleted_at', null)
+
+    const map: Record<string, MediaItem[]> = {}
+    for (const m of media ?? []) {
+      const { data: signed } = await supabase.storage.from('media').createSignedUrl(m.object_path, 3600)
+      if (signed && m.progress_report_id) {
+        if (!map[m.progress_report_id]) map[m.progress_report_id] = []
+        map[m.progress_report_id].push({
+          url: signed.signedUrl,
+          name: m.object_path.split('/').pop() || 'Attachment',
+          mime: m.mime_type || '',
+        })
+      }
+    }
+    setMediaMap(map)
+  }
+
   useEffect(() => {
     const init = async () => {
       setLoading(true)
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) { setLoading(false); return }
+      setUserId(user.id)
 
       const { data: me } = await supabase.from('users').select('role_key, school_id').eq('id', user.id).maybeSingle()
       const r = (me?.role_key ?? null) as Role | null
@@ -89,14 +123,16 @@ export default function Reports() {
               .is('deleted_at', null)
               .order('created_at', { ascending: false })
 
-            setReports((rpts ?? []).map((r: any) => ({
+            const mapped = (rpts ?? []).map((r: any) => ({
               id: r.id,
               term_label: r.term_label,
               summary: r.summary,
               metrics: r.metrics,
               created_at: r.created_at,
               student_name: r.students ? `${r.students.first_name} ${r.students.last_name}` : '',
-            })))
+            }))
+            setReports(mapped)
+            loadMediaForReports(mapped.map(r => r.id))
           }
         }
       } else if (r === 'school_admin') {
@@ -107,14 +143,16 @@ export default function Reports() {
           .is('deleted_at', null)
           .order('created_at', { ascending: false })
 
-        setReports((rpts ?? []).map((r: any) => ({
+        const mapped = (rpts ?? []).map((r: any) => ({
           id: r.id,
           term_label: r.term_label,
           summary: r.summary,
           metrics: r.metrics,
           created_at: r.created_at,
           student_name: r.students ? `${r.students.first_name} ${r.students.last_name}` : '',
-        })))
+        }))
+        setReports(mapped)
+        loadMediaForReports(mapped.map(r => r.id))
       }
 
       setLoading(false)
@@ -147,14 +185,16 @@ export default function Reports() {
         .is('deleted_at', null)
         .order('created_at', { ascending: false })
 
-      setReports((data ?? []).map((r: any) => ({
+      const mapped = (data ?? []).map((r: any) => ({
         id: r.id,
         term_label: r.term_label,
         summary: r.summary,
         metrics: r.metrics,
         created_at: r.created_at,
         student_name: r.students ? `${r.students.first_name} ${r.students.last_name}` : '',
-      })))
+      }))
+      setReports(mapped)
+      loadMediaForReports(mapped.map(r => r.id))
       setLoadingReports(false)
     }
     loadReports()
@@ -163,18 +203,19 @@ export default function Reports() {
   const handleCreate = async () => {
     if (!formTerm.trim() || !selectedStudent || !teacherId || !schoolId) return
     setSaving(true)
-    const { error } = await supabase.from('progress_reports').insert({
+    const { data: newReport, error } = await supabase.from('progress_reports').insert({
       school_id: schoolId,
       student_id: selectedStudent,
       teacher_id: teacherId,
       term_label: formTerm.trim(),
       summary: formSummary.trim() || null,
       metrics: Object.keys(formMetrics).length > 0 ? formMetrics : null,
-    })
+    }).select('id').single()
     if (error) { show(error.message, 'error') }
     else {
-      show('Report created', 'success')
+      show(t('reports.reportCreated'), 'success')
       setFormTerm(''); setFormSummary(''); setFormMetrics({}); setShowCreate(false)
+      if (newReport) setLastReportId(newReport.id)
       // Reload
       const { data } = await supabase
         .from('progress_reports')
@@ -182,11 +223,13 @@ export default function Reports() {
         .eq('student_id', selectedStudent)
         .is('deleted_at', null)
         .order('created_at', { ascending: false })
-      setReports((data ?? []).map((r: any) => ({
+      const mapped = (data ?? []).map((r: any) => ({
         id: r.id, term_label: r.term_label, summary: r.summary, metrics: r.metrics,
         created_at: r.created_at,
         student_name: r.students ? `${r.students.first_name} ${r.students.last_name}` : '',
-      })))
+      }))
+      setReports(mapped)
+      loadMediaForReports(mapped.map(r => r.id))
     }
     setSaving(false)
   }
@@ -201,22 +244,22 @@ export default function Reports() {
   return (
     <div className="grid" style={{ gap: 16 }}>
       <div className="card">
-        <h2 style={{ marginTop: 0 }}>Progress Reports</h2>
+        <h2 style={{ marginTop: 0 }}>{t('reports.title')}</h2>
 
         {/* Teacher selectors */}
         {role === 'teacher' && (
           <div className="grid cols-2" style={{ gap: 12, marginBottom: 16 }}>
             <div>
-              <label className="helper">Class</label>
+              <label className="helper">{t('reports.selectClass')}</label>
               <select value={selectedClass} onChange={e => { setSelectedClass(e.target.value); setSelectedStudent('') }}>
-                <option value="">Select class</option>
+                <option value="">{t('attendance.selectClass')}</option>
                 {classes.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
               </select>
             </div>
             <div>
-              <label className="helper">Student</label>
+              <label className="helper">{t('reports.selectStudent')}</label>
               <select value={selectedStudent} onChange={e => setSelectedStudent(e.target.value)} disabled={!selectedClass}>
-                <option value="">Select student</option>
+                <option value="">{t('reports.selectStudent')}</option>
                 {students.map(s => <option key={s.id} value={s.id}>{s.first_name} {s.last_name}</option>)}
               </select>
             </div>
@@ -226,25 +269,25 @@ export default function Reports() {
         {/* Create button */}
         {role === 'teacher' && selectedStudent && !showCreate && (
           <button className="btn btn-primary" style={{ marginBottom: 16 }} onClick={() => setShowCreate(true)}>
-            + Create Report
+            {t('reports.createReport')}
           </button>
         )}
 
         {/* Create form */}
         {showCreate && role === 'teacher' && (
           <div className="card" style={{ marginBottom: 16, background: 'var(--bg)' }}>
-            <h4 style={{ margin: '0 0 12px 0' }}>New Progress Report</h4>
+            <h4 style={{ margin: '0 0 12px 0' }}>{t('reports.newReport')}</h4>
             <div style={{ display: 'grid', gap: 12 }}>
               <div>
-                <label className="helper">Term / Period *</label>
-                <input value={formTerm} onChange={e => setFormTerm(e.target.value)} placeholder="e.g. 2026 Term 1" />
+                <label className="helper">{t('reports.term')}</label>
+                <input value={formTerm} onChange={e => setFormTerm(e.target.value)} placeholder={t('reports.termPlaceholder')} />
               </div>
               <div>
-                <label className="helper">Summary</label>
-                <textarea value={formSummary} onChange={e => setFormSummary(e.target.value)} rows={3} placeholder="General comments about the student's progress..." />
+                <label className="helper">{t('reports.summary')}</label>
+                <textarea value={formSummary} onChange={e => setFormSummary(e.target.value)} rows={3} placeholder={t('reports.summaryPlaceholder')} />
               </div>
               <div>
-                <label className="helper">Performance Metrics</label>
+                <label className="helper">{t('reports.metrics')}</label>
                 <div style={{ display: 'grid', gap: 8, marginTop: 4 }}>
                   {CATEGORIES.map(cat => (
                     <div key={cat} style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
@@ -254,7 +297,7 @@ export default function Reports() {
                         onChange={e => setFormMetrics(prev => ({ ...prev, [cat]: e.target.value }))}
                         style={{ flex: 1, padding: '6px 8px' }}
                       >
-                        <option value="">Not rated</option>
+                        <option value="">{t('reports.notRated')}</option>
                         {LEVELS.map(l => <option key={l} value={l}>{l}</option>)}
                       </select>
                     </div>
@@ -264,10 +307,40 @@ export default function Reports() {
             </div>
             <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
               <button className="btn btn-primary" onClick={handleCreate} disabled={saving || !formTerm.trim()}>
-                {saving ? <><LoadingSpinner size="sm" /> Saving...</> : 'Create Report'}
+                {saving ? <><LoadingSpinner size="sm" /> Saving...</> : t('reports.create')}
               </button>
-              <button className="btn btn-secondary" onClick={() => setShowCreate(false)}>Cancel</button>
+              <button className="btn btn-secondary" onClick={() => setShowCreate(false)}>{t('common.cancel')}</button>
             </div>
+          </div>
+        )}
+
+        {/* File upload after report creation */}
+        {lastReportId && schoolId && userId && (
+          <div className="card" style={{ marginBottom: 16, background: 'var(--bg)', padding: 16 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+              <Paperclip size={16} />
+              <strong style={{ fontSize: 14 }}>{t('reports.attachFiles')}</strong>
+            </div>
+            <FileUpload
+              schoolId={schoolId}
+              uploadedBy={userId}
+              folder="reports"
+              associationField="progress_report_id"
+              associationId={lastReportId}
+              onUploadComplete={() => {
+                show(t('reports.fileAttached'), 'success')
+                loadMediaForReports(reports.map(r => r.id))
+              }}
+              onError={(msg: string) => show(msg, 'error')}
+              compact
+            />
+            <button
+              className="btn btn-secondary"
+              style={{ marginTop: 8, fontSize: 13 }}
+              onClick={() => setLastReportId(null)}
+            >
+              {t('reports.doneAttaching')}
+            </button>
           </div>
         )}
 
@@ -277,8 +350,8 @@ export default function Reports() {
         ) : reports.length === 0 ? (
           <div className="empty">
             {role === 'teacher' && !selectedStudent
-              ? 'Select a class and student to view or create reports.'
-              : 'No progress reports found.'
+              ? t('reports.selectPrompt')
+              : t('reports.noReports')
             }
           </div>
         ) : (
@@ -300,6 +373,32 @@ export default function Reports() {
                       <span key={cat} className="badge" style={{ ...levelColor(level), fontSize: 12 }}>
                         {cat}: {level}
                       </span>
+                    ))}
+                  </div>
+                )}
+                {mediaMap[r.id] && mediaMap[r.id].length > 0 && (
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: 10 }}>
+                    {mediaMap[r.id].map((m, i) => (
+                      m.mime.startsWith('image/') ? (
+                        <img
+                          key={i}
+                          src={m.url}
+                          alt={m.name}
+                          style={{ maxWidth: 180, maxHeight: 140, borderRadius: 8, cursor: 'pointer', objectFit: 'cover' }}
+                          onClick={() => window.open(m.url, '_blank')}
+                        />
+                      ) : (
+                        <a
+                          key={i}
+                          href={m.url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="badge"
+                          style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 12 }}
+                        >
+                          <Paperclip size={12} /> {m.name}
+                        </a>
+                      )
                     ))}
                   </div>
                 )}

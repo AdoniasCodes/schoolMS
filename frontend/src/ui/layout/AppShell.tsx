@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { useTheme } from '@/ui/theme/ThemeProvider'
+import { useLanguage } from '@/i18n/LanguageProvider'
 import { supabase } from '@/lib/supabaseClient'
 
 const NavLink: React.FC<{ to: string; label: string; icon?: React.ReactNode; onClick?: () => void }> = ({ to, label, icon, onClick }) => {
@@ -26,6 +27,7 @@ const NavLink: React.FC<{ to: string; label: string; icon?: React.ReactNode; onC
 
 export const AppShell: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { theme, toggle } = useTheme()
+  const { t, language, setLanguage } = useLanguage()
   const navigate = useNavigate()
   const [mobileOpen, setMobileOpen] = useState(false)
   const [userRole, setUserRole] = useState<string | null>(null)
@@ -51,21 +53,29 @@ export const AppShell: React.FC<{ children: React.ReactNode }> = ({ children }) 
 
   const navItems = isSuperAdmin ? (
     <>
-      <NavLink to="/app/super" label="Overview" onClick={closeMobile} />
-      <NavLink to="/app/settings" label="Settings" onClick={closeMobile} />
+      <NavLink to="/app/super" label={t('nav.overview')} onClick={closeMobile} />
+      <NavLink to="/app/search" label={t('nav.search')} onClick={closeMobile} />
+      <NavLink to="/app/settings" label={t('nav.settings')} onClick={closeMobile} />
     </>
   ) : (
     <>
-      <NavLink to="/app" label="Dashboard" onClick={closeMobile} />
-      <NavLink to="/app/classes" label="Classes" onClick={closeMobile} />
-      <NavLink to="/app/students" label="Students" onClick={closeMobile} />
-      <NavLink to="/app/attendance" label="Attendance" onClick={closeMobile} />
-      <NavLink to="/app/updates" label="Daily Updates" onClick={closeMobile} />
-      <NavLink to="/app/announcements" label="Announcements" onClick={closeMobile} />
-      <NavLink to="/app/messages" label="Messages" onClick={closeMobile} />
-      <NavLink to="/app/reports" label="Progress Reports" onClick={closeMobile} />
-      <NavLink to="/app/import" label="Bulk Import" onClick={closeMobile} />
-      <NavLink to="/app/settings" label="Settings" onClick={closeMobile} />
+      <NavLink to="/app" label={t('nav.dashboard')} onClick={closeMobile} />
+      <NavLink to="/app/classes" label={t('nav.classes')} onClick={closeMobile} />
+      <NavLink to="/app/students" label={t('nav.students')} onClick={closeMobile} />
+      <NavLink to="/app/attendance" label={t('nav.attendance')} onClick={closeMobile} />
+      <NavLink to="/app/updates" label={t('nav.updates')} onClick={closeMobile} />
+      <NavLink to="/app/announcements" label={t('nav.announcements')} onClick={closeMobile} />
+      <NavLink to="/app/messages" label={t('nav.messages')} onClick={closeMobile} />
+      <NavLink to="/app/reports" label={t('nav.reports')} onClick={closeMobile} />
+      {(userRole === 'teacher' || userRole === 'school_admin') && (
+        <NavLink to="/app/grades" label={t('nav.grades')} onClick={closeMobile} />
+      )}
+      {userRole === 'school_admin' && (
+        <NavLink to="/app/report-cards" label={t('nav.reportCards')} onClick={closeMobile} />
+      )}
+      <NavLink to="/app/search" label={t('nav.search')} onClick={closeMobile} />
+      <NavLink to="/app/import" label={t('nav.import')} onClick={closeMobile} />
+      <NavLink to="/app/settings" label={t('nav.settings')} onClick={closeMobile} />
     </>
   )
 
@@ -77,7 +87,7 @@ export const AppShell: React.FC<{ children: React.ReactNode }> = ({ children }) 
       <aside className="sidebar sidebar-desktop">
         <div className="brand">
           <img src="/images/logo.webp" alt="Abogida logo" style={{ width: 120, height: 'auto', borderRadius: 12, display: 'block', aspectRatio: '500 / 178', maxHeight: 42.72 }} />
-          {isSuperAdmin && <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 4 }}>Platform Admin</div>}
+          {isSuperAdmin && <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 4 }}>{t('nav.platformAdmin')}</div>}
         </div>
         <nav className="nav-vertical">{navItems}</nav>
       </aside>
@@ -105,10 +115,18 @@ export const AppShell: React.FC<{ children: React.ReactNode }> = ({ children }) 
             </span>
           </button>
           <div style={{ display: 'flex', gap: 8 }}>
-            <button className="btn btn-secondary" onClick={toggle} aria-label={theme === 'light' ? 'Activate dark mode' : 'Activate light mode'}>
-              {theme === 'light' ? 'Dark mode' : 'Light mode'}
+            <button
+              className="btn btn-secondary"
+              onClick={() => setLanguage(language === 'en' ? 'am' : 'en')}
+              aria-label="Switch language"
+              style={{ fontWeight: 600, minWidth: 40 }}
+            >
+              {language === 'en' ? 'AM' : 'EN'}
             </button>
-            <button className="btn btn-secondary" onClick={signOut} aria-label="Sign out of Abogida">Sign out</button>
+            <button className="btn btn-secondary" onClick={toggle} aria-label={theme === 'light' ? t('nav.darkMode') : t('nav.lightMode')}>
+              {theme === 'light' ? t('nav.darkMode') : t('nav.lightMode')}
+            </button>
+            <button className="btn btn-secondary" onClick={signOut} aria-label={t('nav.signOut')}>{t('nav.signOut')}</button>
           </div>
         </div>
         {children}
